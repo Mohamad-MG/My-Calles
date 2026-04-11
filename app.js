@@ -2472,9 +2472,9 @@ function renderShellChrome() {
   elements.brandMark.textContent = copy().meta.brandMark;
   elements.brandEyebrow.textContent = copy().meta.brandEyebrow;
   elements.productName.textContent = copy().meta.productName;
-  elements.sidebarWeeklyLabel.textContent = copy().chrome.sidebar.weeklyFocusLabel;
-  elements.sidebarRulesLabel.textContent = copy().chrome.sidebar.rulesLabel;
-  elements.rulesList.innerHTML = copy().chrome.sidebar.rules.map((rule) => `<li>${rule}</li>`).join("");
+  if (elements.sidebarWeeklyLabel) elements.sidebarWeeklyLabel.textContent = copy().chrome.sidebar.weeklyFocusLabel;
+  if (elements.sidebarRulesLabel) elements.sidebarRulesLabel.textContent = copy().chrome.sidebar.rulesLabel;
+  if (elements.rulesList) elements.rulesList.innerHTML = copy().chrome.sidebar.rules.map((rule) => `<li>${rule}</li>`).join("");
   elements.topbarEyebrow.textContent = copy().meta.dashboardEyebrow;
   elements.drawerClose.setAttribute(
     "aria-label",
