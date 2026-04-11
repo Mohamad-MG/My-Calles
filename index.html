@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MyCalls Operational Revenue Dashboard</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+    <script>
+      window.__MYCALLS_BOOT__ = { started: false, ready: false, error: null };
+      document.documentElement.classList.add("app-pending");
+    </script>
+  </head>
+  <body>
+    <div class="app-fallback hidden" id="app-fallback">
+      <div class="fallback-card">
+        <p class="eyebrow">Runtime Check</p>
+        <h1>MyCalls Dashboard could not start</h1>
+        <p id="fallback-message">
+          This dashboard must run over `http://localhost` or GitHub Pages, not `file://`.
+        </p>
+        <div class="fallback-actions">
+          <code>python -m http.server 4173</code>
+          <span>Then open `http://localhost:4173`</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">MC</div>
+          <div>
+            <p class="eyebrow">Revenue Engine</p>
+            <h1>MyCalls</h1>
+          </div>
+        </div>
+
+        <nav class="nav" id="main-nav"></nav>
+
+        <section class="sidebar-panel">
+          <p class="panel-label">الهدف الأسبوعي</p>
+          <div id="sidebar-weekly-focus"></div>
+        </section>
+
+        <section class="sidebar-panel">
+          <p class="panel-label">قواعد التشغيل</p>
+          <ul class="rules-list">
+            <li>الرد ليس فرصة</li>
+            <li>لا Proposal بدون Readiness</li>
+            <li>كل سجل له Owner و Next Step</li>
+          </ul>
+        </section>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Operational Dashboard</p>
+            <h2 id="screen-title">Executive Focus</h2>
+          </div>
+          <div class="topbar-actions" id="screen-actions"></div>
+        </header>
+
+        <section class="filters" id="global-filters"></section>
+
+        <section class="content" id="screen-content"></section>
+      </main>
+    </div>
+
+    <div class="drawer-backdrop hidden" id="drawer-backdrop"></div>
+    <aside class="drawer hidden" id="drawer">
+      <div class="drawer-header">
+        <div>
+          <p class="eyebrow" id="drawer-kicker">Details</p>
+          <h3 id="drawer-title">Record</h3>
+        </div>
+        <button class="icon-button" id="drawer-close" type="button" aria-label="Close drawer">
+          ✕
+        </button>
+      </div>
+      <div class="drawer-body" id="drawer-body"></div>
+    </aside>
+
+    <template id="empty-state-template">
+      <div class="empty-state">
+        <p class="empty-title">لا توجد عناصر مطابقة</p>
+        <p class="empty-copy">جرّب تعديل الفلاتر أو إضافة سجل جديد.</p>
+      </div>
+    </template>
+
+    <script>
+      (async function bootMyCalls() {
+        const fallback = document.getElementById("app-fallback");
+        const fallbackMessage = document.getElementById("fallback-message");
+
+        function showFallback(message) {
+          window.__MYCALLS_BOOT__.error = message;
+          document.documentElement.classList.remove("app-pending");
+          document.documentElement.classList.add("app-failed");
+          fallback.classList.remove("hidden");
+          fallbackMessage.textContent = message;
+        }
+
+        if (window.location.protocol === "file:") {
+          showFallback(
+            "This dashboard is not supported over file://. Open it through GitHub Pages or a local HTTP server such as http://localhost:4173.",
+          );
+          return;
+        }
+
+        try {
+          window.__MYCALLS_BOOT__.started = true;
+          const app = await import("./app.js");
+          app.bootstrapApp();
+          window.__MYCALLS_BOOT__.ready = true;
+          document.documentElement.classList.remove("app-pending");
+          document.documentElement.classList.add("app-ready");
+        } catch (error) {
+          showFallback(
+            `Dashboard boot failed. Run it on GitHub Pages or http://localhost. Technical detail: ${error.message}`,
+          );
+        }
+      })();
+    </script>
+  </body>
+</html>
