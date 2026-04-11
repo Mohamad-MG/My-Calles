@@ -68,6 +68,27 @@
 
   /* Topbar height */
   --topbar-h: 56px;
+
+  /* ── Execution Authority Tokens ────────────────────────────── */
+  /* KPI numerics */
+  --kpi-number-size:  2.75rem;
+  --kpi-number-tight: -0.04em;
+
+  /* Card tier backgrounds */
+  --card-primary-bg:     #FFFFFF;
+  --card-primary-border: rgba(13,17,23,0.12);
+  --card-primary-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.05);
+
+  --card-secondary-bg:   #FFFFFF;
+  --card-secondary-shadow: 0 1px 3px rgba(0,0,0,0.06);
+
+  --card-passive-bg:   #F8F9FB;
+  --card-passive-shadow: none;
+
+  /* Hero action panel (Today Action Queue) */
+  --hero-action-bg:     #0D1117;
+  --hero-action-border: rgba(37,99,235,0.4);
+  --hero-action-shadow: 0 20px 48px rgba(0,0,0,0.18), 0 6px 16px rgba(37,99,235,0.12);
 }
 
 /* ── Reset ────────────────────────────────────────────────────── */
@@ -615,48 +636,85 @@ h4 { font-size: 0.875rem; }
 }
 
 .stat-card {
-  padding: 18px 20px;
+  padding: 20px 22px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   position: relative;
   overflow: hidden;
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+  /* Elevated base — KPI cards are primary interface elements */
+  background: var(--canvas-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--card-secondary-shadow);
 }
 
+/* Persistent top-edge accent bar (always visible, not just on hover) */
 .stat-card::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--accent), transparent);
-  opacity: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent) 0%, rgba(37,99,235,0.3) 60%, transparent 100%);
+  opacity: 0.55;
   transition: opacity 0.2s ease;
 }
 
 .stat-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  box-shadow: var(--card-primary-shadow);
+  transform: translateY(-2px);
 }
 .stat-card:hover::before { opacity: 1; }
 
 .stat-card span {
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: 0.68rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.09em;
   color: var(--text-tertiary);
 }
+
+/* KPI Number — dominant, authoritative */
 .stat-card strong {
-  font-size: 1.875rem;
-  font-weight: 700;
-  letter-spacing: -0.035em;
+  font-size: var(--kpi-number-size);
+  font-weight: 800;
+  letter-spacing: var(--kpi-number-tight);
   color: var(--text-primary);
   line-height: 1;
 }
+
 .stat-card small {
   font-size: 0.75rem;
   color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+/* Per-position KPI tinting — first card (primary metric) gets accent tint */
+.stat-strip > .stat-card:first-child,
+.source-stat-strip > .stat-card:first-child {
+  border-color: var(--accent-mid);
+  background: linear-gradient(160deg, var(--accent-light) 0%, var(--canvas-elevated) 70%);
+}
+.stat-strip > .stat-card:first-child::before,
+.source-stat-strip > .stat-card:first-child::before {
+  opacity: 1;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-mid));
+}
+.stat-strip > .stat-card:first-child strong,
+.source-stat-strip > .stat-card:first-child strong {
+  color: var(--accent-hover);
+}
+
+/* Second card — warming tint (needs attention) */
+.stat-strip > .stat-card:nth-child(2),
+.source-stat-strip > .stat-card:nth-child(2) {
+  border-color: rgba(217,119,6,0.18);
+}
+.stat-strip > .stat-card:nth-child(2)::before,
+.source-stat-strip > .stat-card:nth-child(2)::before {
+  background: linear-gradient(90deg, var(--warning) 0%, transparent 80%);
+  opacity: 0.5;
 }
 
 /* ── Panel base ───────────────────────────────────────────────── */
@@ -739,6 +797,111 @@ h4 { font-size: 0.875rem; }
 
 .analysis-panel { gap: 0; }
 
+/* ── HERO ACTION PANEL — "Today Action Queue" (2nd panel) ──────── */
+/* Most dominant element on the screen. Dark background = highest authority. */
+.analysis-grid > article.panel:nth-child(2) {
+  background: var(--hero-action-bg);
+  border-color: var(--hero-action-border);
+  box-shadow: var(--hero-action-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Blueprint grid overlay — subtle texture inside hero panel */
+.analysis-grid > article.panel:nth-child(2)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(37,99,235,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37,99,235,0.04) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+}
+
+/* Accent glow strip at top of hero panel */
+.analysis-grid > article.panel:nth-child(2)::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent) 0%, #60A5FA 50%, var(--accent) 100%);
+  background-size: 200% 100%;
+  animation: kpi-sweep 4s linear infinite;
+  z-index: 1;
+}
+
+@keyframes kpi-sweep {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+/* Hero panel text overrides for dark background */
+.analysis-grid > article.panel:nth-child(2) .panel-label {
+  color: rgba(96,165,250,0.9);
+}
+
+.analysis-grid > article.panel:nth-child(2) h3 {
+  color: #F8FAFC;
+}
+
+.analysis-grid > article.panel:nth-child(2) .rail-item,
+.analysis-grid > article.panel:nth-child(2) button.rail-item {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.09);
+  color: #E2E8F0;
+}
+
+.analysis-grid > article.panel:nth-child(2) button.rail-item:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(99,162,255,0.35);
+  box-shadow: 0 0 0 1px rgba(99,162,255,0.2);
+  transform: translateY(-1px);
+}
+
+.analysis-grid > article.panel:nth-child(2) .rail-item strong {
+  color: #F1F5F9;
+  font-weight: 600;
+}
+
+.analysis-grid > article.panel:nth-child(2) .meta-row {
+  color: rgba(255,255,255,0.5);
+}
+
+.analysis-grid > article.panel:nth-child(2) .pill {
+  background: rgba(37,99,235,0.25);
+  border-color: rgba(99,162,255,0.3);
+  color: #93C5FD;
+}
+
+.analysis-grid > article.panel:nth-child(2) .empty-state {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.1);
+}
+
+.analysis-grid > article.panel:nth-child(2) .empty-title {
+  color: rgba(255,255,255,0.6);
+}
+
+.analysis-grid > article.panel:nth-child(2) .empty-copy {
+  color: rgba(255,255,255,0.35);
+}
+
+/* ── Panel 1 (Source Priority) — strong secondary ──────────────── */
+.analysis-grid > article.panel:nth-child(1) {
+  box-shadow: var(--card-secondary-shadow);
+}
+
+/* ── Panel 3 (Drop-off) — warning tone ─────────────────────────── */
+.analysis-grid > article.panel:nth-child(3) {
+  border-top: 3px solid var(--warning);
+  box-shadow: var(--card-secondary-shadow);
+}
+
+.analysis-grid > article.panel:nth-child(3) .panel-label {
+  color: var(--warning);
+}
+
 /* ── Rail items (clickable rows inside panels) ────────────────── */
 .rail-list, .stack-list, .kanban-stack, .queue-list {
   display: flex;
@@ -807,7 +970,9 @@ button.analysis-action-row:hover {
   color: inherit;
 }
 
-.source-card-main:hover {}
+.source-card-main:hover {
+  background: rgba(37,99,235,0.02);
+}
 
 .source-card-actions {
   padding: 0 14px 12px;
@@ -1241,6 +1406,7 @@ button.queue-item:hover { box-shadow: var(--shadow-md); transform: translateY(-1
   position: fixed;
   inset: 0;
   background: rgba(13,17,23,0.28);
+  -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   z-index: 40;
 }
@@ -1541,4 +1707,326 @@ html[dir="rtl"] .drawer { box-shadow: -8px 0 40px rgba(0,0,0,0.12); }
   .drawer      { width: 100vw; }
   .topbar { flex-direction: column; align-items: flex-start; height: auto; padding: 12px 16px; gap: 8px; }
   .topbar-utility { align-self: flex-end; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EXECUTION AUTHORITY LAYER
+   Card Hierarchy · CTA System · Section Depth · Action Surfaces
+══════════════════════════════════════════════════════════════ */
+
+/* ── THREE-TIER CARD HIERARCHY ────────────────────────────────── */
+
+/*
+  TIER 1 — PRIMARY (action-driven)
+  Use on: cards that require immediate user action
+  Signals: Ready for Handoff, Needs Reply
+*/
+.card--primary {
+  background: var(--card-primary-bg);
+  border: 1px solid var(--card-primary-border);
+  box-shadow: var(--card-primary-shadow);
+  position: relative;
+}
+
+.card--primary::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent) 0%, #60A5FA 100%);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+
+.card--primary .source-card-actions .ghost-button {
+  border-color: var(--accent-mid);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.card--primary .source-card-actions .ghost-button:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+/*
+  TIER 2 — SECONDARY (informational, needs monitoring)
+  Use on: cards with context but no immediate CTA required
+  Signals: Needs Qualification, Meeting Booked
+*/
+.card--secondary {
+  background: var(--card-secondary-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--card-secondary-shadow);
+}
+
+/*
+  TIER 3 — PASSIVE (low priority, monitoring only)
+  Use on: Closed, Disqualified, early-stage leads with no next step
+  Visual: receded, lower contrast, no accent
+*/
+.card--passive {
+  background: var(--card-passive-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--card-passive-shadow);
+  opacity: 0.78;
+}
+
+.card--passive:hover { opacity: 1; }
+
+.card--passive .kanban-top strong,
+.card--passive .source-card-main strong {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* CSS-only tier detection — Danger badge parent = elevated urgency */
+.source-card:has(.badge.danger) {
+  border-color: var(--danger-mid);
+  box-shadow: 0 4px 16px rgba(220,38,38,0.08), 0 1px 4px rgba(220,38,38,0.06);
+  position: relative;
+}
+
+.source-card:has(.badge.danger)::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--danger);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  opacity: 0.7;
+}
+
+/* Cards with actions (non-empty action footer) = primary tier treatment */
+.source-card:has(.source-card-actions:not(:empty)) {
+  border-color: rgba(37,99,235,0.15);
+  box-shadow: var(--card-primary-shadow);
+}
+
+
+/* ── CTA LAYER — ACTION BUTTONS ───────────────────────────────────── */
+
+/* Source card action footer — elevated, always visible */
+.source-card-actions {
+  padding: 0 14px 14px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 10px;
+}
+
+/* CTA buttons inside source card actions get stronger treatment */
+.source-card-actions .ghost-button {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  background: var(--canvas-sunken);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  transition: background 0.12s ease, border-color 0.12s ease,
+              transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.source-card-actions .ghost-button:hover {
+  background: var(--canvas-elevated);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+/* Progression buttons (convert to opportunity) — primary CTA styling */
+.source-card-actions .ghost-button[data-convert-lead] {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--shadow-sm), 0 0 0 1px rgba(37,99,235,0.25) inset;
+}
+
+.source-card-actions .ghost-button[data-convert-lead]:hover {
+  background: var(--accent-hover);
+  box-shadow: var(--shadow-md);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* Open opportunity buttos — success color */
+.source-card-actions .ghost-button[data-open-record*="opportunity"] {
+  color: var(--success);
+  border-color: var(--success-mid);
+  background: var(--success-dim);
+}
+
+.source-card-actions .ghost-button[data-open-record*="opportunity"]:hover {
+  background: rgba(5,150,105,0.12);
+  border-color: var(--success);
+}
+
+/* Progression rail CTA buttons */
+.rail-item .ghost-button[data-convert-lead],
+.action-rail-item .ghost-button[data-convert-lead] {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  font-size: 0.75rem;
+  padding: 5px 10px;
+  flex-shrink: 0;
+}
+
+.rail-item .ghost-button[data-convert-lead]:hover,
+.action-rail-item .ghost-button[data-convert-lead]:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+  color: #fff;
+}
+
+
+/* ── SECTION DEPTH + VISUAL SEPARATION ────────────────────────────── */
+
+/* KPI strip section — neutral canvas separates it from card grid */
+.analysis-board > .stat-strip,
+.analysis-board > .source-stat-strip {
+  padding: 4px 0;
+}
+
+/* Major section dividers inside analysis-board */
+.analysis-board > section + section {
+  margin-top: 4px;
+}
+
+/* All-leads panel — stronger internal depth */
+.panel.all-leads-panel {
+  background: var(--canvas-elevated);
+  box-shadow: var(--card-primary-shadow);
+}
+
+/* Source panels — slight elevation above canvas */
+.panel.hunt-panel,
+.panel.snapshot-panel,
+.panel.extraction-panel,
+.panel.analysis-panel {
+  box-shadow: var(--shadow-sm);
+}
+
+/* Kanban columns — sunken wells */
+.kanban-column {
+  background: var(--canvas-sunken);
+}
+
+/* Source workflow columns — subtle differentiation between stages */
+.source-workflow > .panel.workflow-column:last-child {
+  border-color: rgba(5,150,105,0.18);
+  background: rgba(240,253,244,0.6);
+}
+
+.source-workflow > .panel.workflow-column:last-child .panel-label {
+  color: var(--success);
+}
+
+/* ── ANALYSIS ACTION ROWS — stronger urgency signalling ──────────── */
+
+/* Make action rows inside the hero panel feel more like clickable items */
+.analysis-grid > article.panel:nth-child(2) button.rail-item.analysis-action-row {
+  position: relative;
+  padding-left: 16px;
+}
+
+/* Left urgency indicator line on action items */
+.analysis-grid > article.panel:nth-child(2) button.rail-item.analysis-action-row::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 10px; bottom: 10px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  opacity: 0.7;
+}
+
+.analysis-grid > article.panel:nth-child(2) button.rail-item.analysis-action-row:hover::before {
+  opacity: 1;
+  background: #60A5FA;
+}
+
+html[lang="ar"] .analysis-grid > article.panel:nth-child(2) button.rail-item.analysis-action-row {
+  padding-left: 12px;
+  padding-right: 16px;
+}
+
+html[lang="ar"] .analysis-grid > article.panel:nth-child(2) button.rail-item.analysis-action-row::before {
+  left: auto;
+  right: 0;
+  border-radius: 2px 0 0 2px;
+}
+
+/* ── SOURCE PRIORITY ROWS — ranked visual weight ─────────────────── */
+
+/* First source (highest priority) gets accent treatment */
+.analysis-grid button.source-priority-row:first-of-type,
+.rail-list > button.source-priority-row:first-child {
+  border-color: var(--accent-mid);
+  background: var(--accent-light);
+}
+
+.analysis-grid button.source-priority-row:first-of-type strong,
+.rail-list > button.source-priority-row:first-child strong {
+  color: var(--accent-hover);
+}
+
+/* ── FLASH BANNER — stronger guidance surface ───────────────────── */
+
+.flash-banner.guidance-banner {
+  background: var(--accent-light);
+  border-color: var(--accent-mid);
+  border-left: 4px solid var(--accent);
+  padding-left: 16px;
+}
+
+html[lang="ar"] .flash-banner.guidance-banner {
+  border-left: none;
+  border-right: 4px solid var(--accent);
+  padding-left: var(--r-md);
+  padding-right: 16px;
+}
+
+.flash-banner.guidance-banner p {
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* ── RESPONSIVE — mobile hero panel fallback ─────────────────────── */
+
+@media (max-width: 1024px) {
+  /* Restore readable mobile rendering for hero panel */
+  .analysis-grid > article.panel:nth-child(2) {
+    background: var(--accent-light);
+    border-color: var(--accent-mid);
+    box-shadow: var(--shadow-md);
+  }
+
+  .analysis-grid > article.panel:nth-child(2) .rail-item,
+  .analysis-grid > article.panel:nth-child(2) button.rail-item {
+    background: var(--canvas-elevated);
+    border-color: var(--border);
+    color: var(--text-primary);
+  }
+
+  .analysis-grid > article.panel:nth-child(2) .panel-label { color: var(--accent); }
+  .analysis-grid > article.panel:nth-child(2) h3           { color: var(--accent-hover); }
+  .analysis-grid > article.panel:nth-child(2) .rail-item strong { color: var(--text-primary); }
+  .analysis-grid > article.panel:nth-child(2) .meta-row         { color: var(--text-secondary); }
+  .analysis-grid > article.panel:nth-child(2) .pill             { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-mid); }
+  .analysis-grid > article.panel:nth-child(2)::before           { animation: none; opacity: 1; }
+  .analysis-grid > article.panel:nth-child(2)::after            { display: none; }
+  .analysis-grid > article.panel:nth-child(2) .empty-state      { background: rgba(255,255,255,0.6); border-color: var(--accent-mid); }
+  .analysis-grid > article.panel:nth-child(2) .empty-title      { color: var(--accent-hover); }
+  .analysis-grid > article.panel:nth-child(2) .empty-copy       { color: var(--text-secondary); }
+  .analysis-grid > article.panel:nth-child(2) button.rail-item:hover {
+    background: var(--canvas-sunken);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-xs);
+  }
 }
