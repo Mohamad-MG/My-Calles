@@ -7,87 +7,87 @@
 
 /* ── Design Tokens ────────────────────────────────────────────── */
 :root {
-  /* Canvas — crisp white on light gray, no noise */
-  --canvas:          #F5F6F8;
+  /* Canvas — strict, flawless white/gray, no noise */
+  --canvas:          #FAFAFA;
   --canvas-elevated: #FFFFFF;
-  --canvas-sunken:   #EDEEF1;
+  --canvas-sunken:   #F4F4F5;
 
-  /* Sidebar (dark, premium) */
-  --sidebar-bg:      #111318;
-  --sidebar-border:  rgba(255,255,255,0.06);
-  --sidebar-text:    rgba(255,255,255,0.68);
-  --sidebar-text-dim:rgba(255,255,255,0.32);
-  --sidebar-hover:   rgba(255,255,255,0.05);
-  --sidebar-active:  rgba(99,162,255,0.12);
-  --sidebar-active-txt: #6FA3F8;
-  --sidebar-width:   228px;
+  /* Sidebar — ultra premium void black */
+  --sidebar-bg:      #09090B;
+  --sidebar-border:  #18181B;
+  --sidebar-text:    #A1A1AA;
+  --sidebar-text-dim:#52525B;
+  --sidebar-hover:   #27272A;
+  --sidebar-active:  #FFFFFF;
+  --sidebar-active-txt: #000000;
+  --sidebar-width:   240px;
 
-  /* Content text — warm near-black */
-  --text-primary:    #0F1117;
-  --text-secondary:  #505A6B;
-  --text-tertiary:   #96A0B0;
+  /* Content text — pure stark contrast */
+  --text-primary:    #09090B;
+  --text-secondary:  #52525B;
+  --text-tertiary:   #A1A1AA;
   --text-inverse:    #FFFFFF;
 
-  /* Primary accent — sharp indigo */
-  --accent:          #2563EB;
-  --accent-dim:      rgba(37,99,235,0.07);
-  --accent-mid:      rgba(37,99,235,0.16);
-  --accent-hover:    #1D4ED8;
+  /* Primary accent — sharp vivid blue */
+  --accent:          #0055FF;
+  --accent-dim:      rgba(0,85,255,0.08);
+  --accent-mid:      rgba(0,85,255,0.15);
+  --accent-hover:    #0044CC;
   --accent-light:    #F0F5FF;
 
-  /* Semantic */
-  --danger:          #D92D20;
-  --danger-dim:      rgba(217,45,32,0.07);
-  --danger-mid:      rgba(217,45,32,0.18);
-  --warning:         #C4790A;
-  --warning-dim:     rgba(196,121,10,0.07);
-  --warning-mid:     rgba(196,121,10,0.18);
-  --success:         #079455;
-  --success-dim:     rgba(7,148,85,0.07);
-  --success-mid:     rgba(7,148,85,0.18);
+  /* Semantic - rigorous pure tones */
+  --danger:          #DF1B41;
+  --danger-dim:      rgba(223,27,65,0.08);
+  --danger-mid:      rgba(223,27,65,0.18);
+  --warning:         #D97706;
+  --warning-dim:     rgba(217,119,6,0.08);
+  --warning-mid:     rgba(217,119,6,0.18);
+  --success:         #059669;
+  --success-dim:     rgba(5,150,105,0.08);
+  --success-mid:     rgba(5,150,105,0.18);
 
-  /* Borders — flat clarity over depth */
-  --border:          rgba(15,17,23,0.09);
-  --border-strong:   rgba(15,17,23,0.15);
+  /* Borders — sharp defining lines, no gradients */
+  --border:          #E4E4E7;
+  --border-strong:   #D4D4D8;
   --border-focus:    var(--accent);
 
-  /* Flat shadows — near-zero, present only as reinforcement */
-  --shadow-xs:  0 1px 1px rgba(0,0,0,0.03);
-  --shadow-sm:  0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md:  0 2px 6px rgba(0,0,0,0.05);
-  --shadow-lg:  0 4px 12px rgba(0,0,0,0.06);
-  --shadow-xl:  0 8px 24px rgba(0,0,0,0.07);
+  /* Flat shadows — completely nullified for absolute flatness */
+  --shadow-xs:  none;
+  --shadow-sm:  none;
+  --shadow-md:  none;
+  --shadow-lg:  none;
+  --shadow-xl:  none;
 
-  /* Radii — flat-friendly, not bubbly */
-  --r-xs:  3px;
-  --r-sm:  5px;
-  --r-md:  8px;
-  --r-lg:  10px;
-  --r-xl:  14px;
-  --r-2xl: 18px;
+  /* Radii — structured, minimal curves */
+  --r-xs:  2px;
+  --r-sm:  4px;
+  --r-md:  6px;
+  --r-lg:  8px;
+  --r-xl:  12px;
+  --r-2xl: 16px;
 
   /* Topbar height */
-  --topbar-h: 52px;
+  --topbar-h: 60px;
 
   /* ── Execution Authority Tokens ────────────────────────────── */
   --kpi-number-size:  2.5rem;
-  --kpi-number-tight: -0.03em;
+  --kpi-number-tight: -0.04em;
 
-  /* Card tiers — flat palette */
+  /* Card tiers — strictly bordered, high contrast edge */
   --card-primary-bg:     #FFFFFF;
-  --card-primary-border: rgba(15,17,23,0.13);
-  --card-primary-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  --card-primary-border: #09090B;
+  --card-primary-shadow: none;
 
   --card-secondary-bg:   #FFFFFF;
-  --card-secondary-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  --card-secondary-shadow: none;
 
-  --card-passive-bg:   #F8F9FB;
+  --card-passive-bg:   #FAFAFA;
   --card-passive-shadow: none;
 
-  /* Hero action panel — flat accent, leading without aggression */
-  --hero-action-bg:     #F0F5FF;
-  --hero-action-border: rgba(37,99,235,0.25);
-  --hero-action-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  /* Hero action panel — solid commanding block */
+  --hero-action-bg:     #09090B;
+  --hero-action-border: #09090B;
+  --hero-action-shadow: none;
 }
 
 /* ── Reset ────────────────────────────────────────────────────── */
@@ -2143,28 +2143,28 @@ html[lang="ar"] .analysis-grid > article.panel:nth-child(2) {
 .analysis-grid > article.panel:nth-child(2)::after  { display: none; }
 .analysis-grid > article.panel:nth-child(2)::before { display: none; }
 
-.analysis-grid > article.panel:nth-child(2) .panel-label { color: var(--accent); }
-.analysis-grid > article.panel:nth-child(2) h3           { color: var(--accent-hover); }
+.analysis-grid > article.panel:nth-child(2) .panel-label { color: rgba(255,255,255,0.7); }
+.analysis-grid > article.panel:nth-child(2) h3           { color: #FFFFFF; }
 .analysis-grid > article.panel:nth-child(2) .rail-item,
 .analysis-grid > article.panel:nth-child(2) button.rail-item {
-  background: rgba(255,255,255,0.65);
-  border-color: rgba(37,99,235,0.11);
-  color: var(--text-primary);
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.1);
+  color: #FFFFFF;
 }
 .analysis-grid > article.panel:nth-child(2) button.rail-item:hover {
-  background: #FFFFFF;
-  border-color: var(--accent-mid);
+  background: rgba(255,255,255,0.12);
+  border-color: var(--accent);
   box-shadow: none;
   transform: none;
 }
-.analysis-grid > article.panel:nth-child(2) .rail-item strong { color: var(--text-primary); }
-.analysis-grid > article.panel:nth-child(2) .meta-row  { color: var(--text-secondary); }
-.analysis-grid > article.panel:nth-child(2) .pill      { background: var(--accent-dim); border-color: var(--accent-mid); color: var(--accent-hover); }
-.analysis-grid > article.panel:nth-child(2) .empty-state  { background: rgba(255,255,255,0.55); border-color: var(--accent-mid); }
-.analysis-grid > article.panel:nth-child(2) .empty-title  { color: var(--accent-hover); }
-.analysis-grid > article.panel:nth-child(2) .empty-copy   { color: var(--text-secondary); }
+.analysis-grid > article.panel:nth-child(2) .rail-item strong { color: #FFFFFF; }
+.analysis-grid > article.panel:nth-child(2) .meta-row  { color: rgba(255,255,255,0.5); }
+.analysis-grid > article.panel:nth-child(2) .pill      { background: var(--accent); border-color: transparent; color: #FFFFFF; }
+.analysis-grid > article.panel:nth-child(2) .empty-state  { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
+.analysis-grid > article.panel:nth-child(2) .empty-title  { color: #FFFFFF; }
+.analysis-grid > article.panel:nth-child(2) .empty-copy   { color: rgba(255,255,255,0.5); }
 .analysis-grid > article.panel:nth-child(2) button.rail-item.analysis-action-row::before {
-  background: var(--accent); opacity: 0.45;
+  background: var(--accent); opacity: 0.8;
 }
 .analysis-grid > article.panel:nth-child(2) button.rail-item.analysis-action-row:hover::before {
   background: var(--accent); opacity: 0.8;
