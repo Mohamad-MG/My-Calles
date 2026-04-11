@@ -155,6 +155,34 @@ function formatCurrency(value) {
   }).format(Number(value || 0));
 }
 
+function inferTextDirection(value) {
+  if (!value) {
+    return "auto";
+  }
+
+  return /[\u0600-\u06FF]/.test(String(value)) ? "rtl" : "ltr";
+}
+
+function compactText(value, limit = 72) {
+  if (!value) {
+    return "—";
+  }
+
+  const normalized = String(value).replace(/\s+/g, " ").trim();
+  return normalized.length > limit ? `${normalized.slice(0, limit - 1).trim()}…` : normalized;
+}
+
+function shortDate(dateValue) {
+  if (!dateValue) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("en-CA", {
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(`${dateValue}T12:00:00`));
+}
+
 function getSectorById(sectorId) {
   return state.data.sectors.find((sector) => sector.id === sectorId);
 }
@@ -400,30 +428,30 @@ function renderExecutiveScreen() {
     <section class="hero-grid dense">
       <article class="hero-card accent">
         <p class="panel-label">Active Sector</p>
-        <h3>${activeSector?.sector_name || "No active sector"}</h3>
-        <p>${activeSector?.icp || "Select one sector only and focus it hard."}</p>
+        <h3 dir="${inferTextDirection(activeSector?.sector_name)}">${activeSector?.sector_name || "No active sector"}</h3>
+        <p dir="${inferTextDirection(activeSector?.icp)}">${compactText(activeSector?.icp || "Select one sector only and focus it hard.", 88)}</p>
       </article>
       <article class="hero-card">
         <p class="panel-label">Current Offer</p>
-        <h3>${state.data.weeklyFocus.current_offer}</h3>
-        <p>${activeSector?.offer_angle || "No active offer"}</p>
+        <h3 dir="${inferTextDirection(state.data.weeklyFocus.current_offer)}">${compactText(state.data.weeklyFocus.current_offer, 44)}</h3>
+        <p dir="${inferTextDirection(activeSector?.offer_angle)}">${compactText(activeSector?.offer_angle || "No active offer", 72)}</p>
       </article>
       <article class="hero-card">
         <p class="panel-label">Weekly Target</p>
-        <h3>${state.data.weeklyFocus.weekly_target}</h3>
-        <p>Decision needed: ${state.data.weeklyFocus.decisions_needed}</p>
+        <h3 dir="${inferTextDirection(state.data.weeklyFocus.weekly_target)}">${compactText(state.data.weeklyFocus.weekly_target, 58)}</h3>
+        <p dir="${inferTextDirection(state.data.weeklyFocus.decisions_needed)}">${compactText(state.data.weeklyFocus.decisions_needed, 58)}</p>
       </article>
       <article class="hero-card danger">
         <p class="panel-label">Current Bottleneck</p>
         <h3>${metrics.breakSuggestion}</h3>
-        <p>Top objection: ${metrics.topObjection}</p>
+        <p dir="${inferTextDirection(metrics.topObjection)}">${compactText(metrics.topObjection, 52)}</p>
       </article>
     </section>
 
     <section class="stat-strip secondary">
-      <article class="stat-card"><span>Current ICP</span><strong>${activeSector?.icp || "—"}</strong></article>
-      <article class="stat-card"><span>Decision Needed Today</span><strong>${state.data.weeklyFocus.decisions_needed}</strong></article>
-      <article class="stat-card"><span>Top Objection</span><strong>${state.data.weeklyFocus.top_objection || metrics.topObjection}</strong></article>
+      <article class="stat-card"><span>Current ICP</span><strong dir="${inferTextDirection(activeSector?.icp)}">${compactText(activeSector?.icp || "—", 64)}</strong></article>
+      <article class="stat-card"><span>Decision Needed Today</span><strong dir="${inferTextDirection(state.data.weeklyFocus.decisions_needed)}">${compactText(state.data.weeklyFocus.decisions_needed, 60)}</strong></article>
+      <article class="stat-card"><span>Top Objection</span><strong dir="${inferTextDirection(state.data.weeklyFocus.top_objection || metrics.topObjection)}">${compactText(state.data.weeklyFocus.top_objection || metrics.topObjection, 42)}</strong></article>
       <article class="stat-card"><span>Reply Rate</span><strong>${Math.round(metrics.replyRate * 100)}%</strong></article>
     </section>
 
@@ -485,8 +513,9 @@ function renderExecutiveScreen() {
                           (item) => `
                             <button class="queue-item" type="button" data-open-record="${item.kind}:${item.id}">
                               <strong>${item.title}</strong>
-                              <span>${item.owner} • ${item.stage}</span>
-                              <small>${item.next_step} — ${formatDate(item.next_step_date)}</small>
+                              <span class="queue-meta" dir="ltr">${item.owner} • ${item.stage}</span>
+                              <bdi class="queue-action" dir="${inferTextDirection(item.next_step)}">${compactText(item.next_step, 42)}</bdi>
+                              <small class="queue-date" dir="ltr">${shortDate(item.next_step_date)}</small>
                             </button>
                           `,
                         )
@@ -584,15 +613,15 @@ function renderLeadCard(lead) {
     <button class="kanban-card" type="button" data-open-record="lead:${lead.id}">
       <div class="kanban-top">
         <div>
-          <strong>${lead.company_name}</strong>
-          <span>${sector?.sector_name || "—"} • ${lead.owner}</span>
+          <strong dir="${inferTextDirection(lead.company_name)}">${lead.company_name}</strong>
+          <span class="mixed-meta" dir="auto">${sector?.sector_name || "—"} • ${lead.owner}</span>
         </div>
         <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${computedStage}</span>
       </div>
       <div class="meta-list">
-        <span>${lead.contact_name} • ${lead.role || "No role"}</span>
-        <span>${lead.channel} • Score ${lead.lead_score || 0}</span>
-        <span>${lead.urgency_level || "No urgency"} • ${lead.decision_level || "No decision level"}</span>
+        <span class="mixed-meta" dir="auto">${lead.contact_name} • ${lead.role || "No role"}</span>
+        <span dir="ltr">${lead.channel} • Score ${lead.lead_score || 0}</span>
+        <span dir="ltr">${lead.urgency_level || "No urgency"} • ${lead.decision_level || "No decision level"}</span>
       </div>
       ${
         guardFlags.length
@@ -601,10 +630,10 @@ function renderLeadCard(lead) {
               .join("")}</div>`
           : ""
       }
-      <p class="card-summary">${lead.pain_signal || lead.notes || "No signal captured yet."}</p>
+      <p class="card-summary" dir="${inferTextDirection(lead.pain_signal || lead.notes)}">${compactText(lead.pain_signal || lead.notes || "No signal captured yet.", 78)}</p>
       <div class="card-footer">
-        <small>Last: ${formatDate(lead.last_contact_date)}</small>
-        <small>Next: ${lead.next_step || "—"} • ${formatDate(lead.next_step_date)}</small>
+        <small dir="ltr">Last ${shortDate(lead.last_contact_date)}</small>
+        <small class="card-next" dir="${inferTextDirection(lead.next_step)}">${compactText(lead.next_step || "—", 40)} <span dir="ltr">${shortDate(lead.next_step_date)}</span></small>
       </div>
     </button>
   `;
@@ -647,15 +676,15 @@ function renderOpportunityCard(opportunity) {
     <button class="kanban-card" type="button" data-open-record="opportunity:${opportunity.id}">
       <div class="kanban-top">
         <div>
-          <strong>${opportunity.company_name}</strong>
-          <span>${sector?.sector_name || "—"} • ${opportunity.owner}</span>
+          <strong dir="${inferTextDirection(opportunity.company_name)}">${opportunity.company_name}</strong>
+          <span class="mixed-meta" dir="auto">${sector?.sector_name || "—"} • ${opportunity.owner}</span>
         </div>
         <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${computedStage}</span>
       </div>
       <div class="meta-list">
-        <span>${formatCurrency(opportunity.estimated_value)}</span>
-        <span>${opportunity.buyer_readiness}</span>
-        <span>${opportunity.stakeholder_status || "Stakeholder path not clear"}</span>
+        <span dir="ltr">${formatCurrency(opportunity.estimated_value)}</span>
+        <span dir="${inferTextDirection(opportunity.buyer_readiness)}">${compactText(opportunity.buyer_readiness, 44)}</span>
+        <span dir="${inferTextDirection(opportunity.stakeholder_status || "Stakeholder path not clear")}">${compactText(opportunity.stakeholder_status || "Stakeholder path not clear", 46)}</span>
       </div>
       ${
         guardFlags.length
@@ -664,10 +693,10 @@ function renderOpportunityCard(opportunity) {
               .join("")}</div>`
           : ""
       }
-      <p class="card-summary">${opportunity.pain_summary}</p>
+      <p class="card-summary" dir="${inferTextDirection(opportunity.pain_summary)}">${compactText(opportunity.pain_summary, 78)}</p>
       <div class="card-footer">
-        <small>${opportunity.objection_summary || "No objection logged"}</small>
-        <small>Next: ${opportunity.next_step} • ${formatDate(opportunity.next_step_date)}</small>
+        <small dir="${inferTextDirection(opportunity.objection_summary)}">${compactText(opportunity.objection_summary || "No objection logged", 48)}</small>
+        <small class="card-next" dir="${inferTextDirection(opportunity.next_step)}">${compactText(opportunity.next_step, 40)} <span dir="ltr">${shortDate(opportunity.next_step_date)}</span></small>
       </div>
     </button>
   `;

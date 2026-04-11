@@ -272,7 +272,8 @@ button {
 .filters {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
+  opacity: 0.92;
 }
 
 .filters label,
@@ -283,7 +284,7 @@ button {
 
 .filters label span,
 .drawer-section label span {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: var(--muted);
 }
 
@@ -292,11 +293,11 @@ button {
 .drawer-section select,
 .drawer-section textarea {
   width: 100%;
-  min-height: 42px;
+  min-height: 38px;
   border: 1px solid var(--stroke);
   background: rgba(255, 255, 255, 0.8);
   color: var(--text);
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 10px;
 }
 
@@ -351,13 +352,15 @@ button {
 }
 
 .hero-card h3 {
-  font-size: 1.12rem;
-  margin-bottom: 8px;
+  font-size: 1.08rem;
+  margin-bottom: 6px;
+  line-height: 1.3;
 }
 
 .hero-card p {
   margin: 0;
-  line-height: 1.55;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
 .hero-card.accent {
@@ -385,12 +388,12 @@ button {
 
 .stat-card span {
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.7rem;
   letter-spacing: 0.02em;
 }
 
 .stat-card strong {
-  line-height: 1.45;
+  line-height: 1.32;
   font-size: 1.03rem;
 }
 
@@ -405,7 +408,7 @@ button {
 }
 
 .panel {
-  padding: 14px;
+  padding: 13px;
 }
 
 .panel-head,
@@ -499,7 +502,7 @@ button {
   border: 1px solid var(--stroke);
   background: var(--panel-soft);
   border-radius: 14px;
-  padding: 12px;
+  padding: 11px;
   text-align: right;
   transition: 150ms ease;
 }
@@ -516,6 +519,38 @@ button {
 .record-row {
   display: grid;
   gap: 4px;
+}
+
+.queue-item {
+  gap: 6px;
+}
+
+.queue-item strong,
+.kanban-card strong {
+  line-height: 1.25;
+}
+
+.queue-meta,
+.mixed-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+  unicode-bidi: plaintext;
+}
+
+.queue-action {
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.queue-date {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.panel:has(.queue-item) .pill {
+  font-size: 0.72rem;
 }
 
 .list-detail-layout {
@@ -556,28 +591,36 @@ button {
 
 .kanban-card {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .kanban-card strong {
-  font-size: 0.96rem;
+  font-size: 0.98rem;
 }
 
 .meta-list {
   display: grid;
-  gap: 5px;
-  font-size: 0.82rem;
+  gap: 4px;
+  font-size: 0.8rem;
 }
 
 .card-summary {
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.42;
   font-size: 0.88rem;
 }
 
 .card-footer {
   display: grid;
-  gap: 5px;
+  gap: 4px;
+}
+
+.card-next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
 }
 
 .bottleneck-layout {
