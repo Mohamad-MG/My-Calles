@@ -1,27 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Tajawal:wght@400;500;700&display=swap');
+
 :root {
-  --bg: #eef2f1;
-  --bg-grid: rgba(15, 52, 55, 0.045);
-  --panel: #fbfcfb;
-  --panel-soft: #f2f6f5;
-  --panel-strong: #ffffff;
-  --stroke: #d7e0de;
-  --stroke-strong: #bcc9c6;
-  --text: #102225;
-  --muted: #5e7175;
-  --accent: #0f5e5d;
-  --accent-strong: #0a4345;
-  --accent-soft: #d9ece9;
-  --warning: #9a5b18;
-  --warning-soft: #fff1df;
-  --danger: #ad3f34;
-  --danger-soft: #fde7e3;
-  --success: #1a7f54;
-  --success-soft: #dff3e8;
-  --shadow: 0 14px 32px rgba(16, 34, 37, 0.08);
-  --radius-xl: 20px;
+  --bg: #f8fafc;
+  --bg-grid: rgba(15, 52, 55, 0.02);
+  --panel: rgba(255, 255, 255, 0.7);
+  --panel-soft: rgba(255, 255, 255, 0.4);
+  --panel-strong: rgba(255, 255, 255, 0.95);
+  --stroke: rgba(203, 213, 225, 0.6);
+  --stroke-strong: rgba(148, 163, 184, 0.6);
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #059669;
+  --accent-strong: #047857;
+  --accent-soft: rgba(16, 185, 129, 0.1);
+  --warning: #d97706;
+  --warning-soft: rgba(245, 158, 11, 0.1);
+  --danger: #dc2626;
+  --danger-soft: rgba(239, 68, 68, 0.1);
+  --success: #10b981;
+  --success-soft: rgba(16, 185, 129, 0.1);
+  --shadow: 0 10px 40px -10px rgba(0,0,0,0.08);
+  --radius-xl: 24px;
   --radius-lg: 16px;
   --radius-md: 12px;
-  --sidebar-width: 244px;
+  --sidebar-width: 260px;
 }
 
 * {
@@ -35,13 +37,19 @@ body {
 
 body {
   margin: 0;
-  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--text);
-  background:
+  background: 
+    radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.06) 0%, transparent 35%),
+    radial-gradient(circle at 0% 100%, rgba(59, 130, 246, 0.04) 0%, transparent 35%),
     linear-gradient(var(--bg-grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
-    linear-gradient(180deg, #f5f8f8 0%, var(--bg) 100%);
-  background-size: 28px 28px, 28px 28px, auto;
+    var(--bg);
+  background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+}
+
+html[lang="ar"] body {
+  font-family: 'Tajawal', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 html[lang="ar"] .eyebrow,
