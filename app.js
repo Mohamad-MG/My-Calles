@@ -59,6 +59,7 @@ const FALLBACK_COPY = {
     },
     filters: {
       sector: "Sector",
+      source: "Source",
       owner: "Owner",
       stage: "Stage / Status",
       urgency: "Urgency",
@@ -150,6 +151,7 @@ const state = {
   activeScreen: "executive",
   filters: {
     sector: "all",
+    source: "all",
     owner: "all",
     stage: "all",
     urgency: "all",
@@ -406,6 +408,68 @@ function getSectorById(sectorId) {
   return state.data.sectors.find((sector) => sector.id === sectorId);
 }
 
+function getLeadById(leadId) {
+  return state.data.leads.find((lead) => lead.id === leadId);
+}
+
+function getChannelOptions() {
+  return Object.keys(copy()?.display?.channels || {});
+}
+
+function getQueueContext(item) {
+  if (item.kind === "lead") {
+    const lead = getLeadById(item.id);
+    const sector = getSectorById(lead?.sector_id);
+    return [displayChannel(lead?.channel), sector?.sector_name].filter(Boolean).join(" • ");
+  }
+
+  if (item.kind === "opportunity") {
+    const opportunity = state.data.opportunities.find((entry) => entry.id === item.id);
+    const sector = getSectorById(opportunity?.sector_id);
+    return [getValueLabel("opportunity", "Opportunity"), sector?.sector_name].filter(Boolean).join(" • ");
+  }
+
+  return [getValueLabel("sector", "Sector"), displayAgentKey(item.owner)].filter(Boolean).join(" • ");
+}
+
+function getSourceBreakdown() {
+  const counts = new Map();
+
+  state.data.leads.forEach((lead) => {
+    const key = lead.channel || "Unknown";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+
+  return [...counts.entries()]
+    .map(([channel, count]) => ({ channel, count }))
+    .sort((left, right) => right.count - left.count || left.channel.localeCompare(right.channel));
+}
+
+function getSectorPressure() {
+  return state.data.sectors
+    .map((sector) => {
+      const liveLeads = state.data.leads.filter(
+        (lead) =>
+          lead.sector_id === sector.id &&
+          !["Disqualified", "No Response"].includes(getComputedLeadStage(lead, todayDate())),
+      ).length;
+      const liveOpportunities = state.data.opportunities.filter(
+        (opportunity) =>
+          opportunity.sector_id === sector.id &&
+          !["Won", "Lost", "Delayed"].includes(getComputedOpportunityStage(opportunity, todayDate())),
+      ).length;
+
+      return { sector, liveLeads, liveOpportunities };
+    })
+    .sort(
+      (left, right) =>
+        Number(right.sector.is_active) - Number(left.sector.is_active) ||
+        right.liveOpportunities - left.liveOpportunities ||
+        right.liveLeads - left.liveLeads ||
+        (right.sector.score || 0) - (left.sector.score || 0),
+    );
+}
+
 function getFilteredLeads() {
   const today = todayDate();
   return state.data.leads.filter((lead) => {
@@ -413,6 +477,8 @@ function getFilteredLeads() {
     const sector = getSectorById(lead.sector_id);
     const matchesSector =
       state.filters.sector === "all" || sector?.id === state.filters.sector;
+    const matchesSource =
+      state.filters.source === "all" || lead.channel === state.filters.source;
     const matchesOwner = state.filters.owner === "all" || lead.owner === state.filters.owner;
     const matchesStage =
       state.filters.stage === "all" || computedStage === state.filters.stage || lead.current_stage === state.filters.stage;
@@ -423,7 +489,7 @@ function getFilteredLeads() {
       state.filters.overdue === "all" ||
       (state.filters.overdue === "yes" && isOverdue) ||
       (state.filters.overdue === "no" && !isOverdue);
-    return matchesSector && matchesOwner && matchesStage && matchesUrgency && matchesOverdue;
+    return matchesSector && matchesSource && matchesOwner && matchesStage && matchesUrgency && matchesOverdue;
   });
 }
 
@@ -432,8 +498,11 @@ function getFilteredOpportunities() {
   return state.data.opportunities.filter((opportunity) => {
     const computedStage = getComputedOpportunityStage(opportunity, today);
     const sector = getSectorById(opportunity.sector_id);
+    const originLead = getLeadById(opportunity.origin_lead_id);
     const matchesSector =
       state.filters.sector === "all" || sector?.id === state.filters.sector;
+    const matchesSource =
+      state.filters.source === "all" || originLead?.channel === state.filters.source;
     const matchesOwner = state.filters.owner === "all" || opportunity.owner === state.filters.owner;
     const matchesStage =
       state.filters.stage === "all" ||
@@ -446,7 +515,7 @@ function getFilteredOpportunities() {
       state.filters.overdue === "all" ||
       (state.filters.overdue === "yes" && isOverdue) ||
       (state.filters.overdue === "no" && !isOverdue);
-    return matchesSector && matchesOwner && matchesStage && matchesUrgency && matchesOverdue;
+    return matchesSector && matchesSource && matchesOwner && matchesStage && matchesUrgency && matchesOverdue;
   });
 }
 
@@ -454,6 +523,9 @@ function getFilteredSectors() {
   const today = todayDate();
   return state.data.sectors.filter((sector) => {
     const computedStatus = getComputedSectorStatus(sector, today);
+    const hasSourceLead =
+      state.filters.source === "all" ||
+      state.data.leads.some((lead) => lead.sector_id === sector.id && lead.channel === state.filters.source);
     const matchesSector =
       state.filters.sector === "all" || sector.id === state.filters.sector;
     const matchesOwner = state.filters.owner === "all" || sector.owner === state.filters.owner;
@@ -465,7 +537,7 @@ function getFilteredSectors() {
       state.filters.overdue === "all" ||
       (state.filters.overdue === "yes" && isOverdue) ||
       (state.filters.overdue === "no" && !isOverdue);
-    return matchesSector && matchesOwner && matchesStage && matchesUrgency && matchesOverdue;
+    return hasSourceLead && matchesSector && matchesOwner && matchesStage && matchesUrgency && matchesOverdue;
   });
 }
 
@@ -522,6 +594,9 @@ function renderFilters() {
   const sectorOptions = state.data.sectors
     .map((sector) => `<option value="${sector.id}">${sector.sector_name}</option>`)
     .join("");
+  const sourceOptions = getChannelOptions()
+    .map((channel) => `<option value="${channel}">${displayChannel(channel)}</option>`)
+    .join("");
   const stageOptions = [...new Set([...LEAD_STAGES, ...OPPORTUNITY_STAGES, "Active", "Testing", "Paused", "Rejected"])]
     .map((stage) => `<option value="${stage}">${displayStage(stage)}</option>`)
     .join("");
@@ -532,6 +607,13 @@ function renderFilters() {
       <select data-filter="sector">
         <option value="all">${copy().chrome.filters.all}</option>
         ${sectorOptions}
+      </select>
+    </label>
+    <label>
+      <span>${copy().chrome.filters.source}</span>
+      <select data-filter="source">
+        <option value="all">${copy().chrome.filters.all}</option>
+        ${sourceOptions}
       </select>
     </label>
     <label>
@@ -649,6 +731,8 @@ function renderExecutiveScreen() {
   const queueGroups = ["Overdue", "Due Today", "Upcoming"];
   const agentSummaries = getAgentSummaries(state.data, today);
   const activeSector = getSectorById(state.data.weeklyFocus.active_sector_id);
+  const sourceBreakdown = getSourceBreakdown().slice(0, 5);
+  const sectorPressure = getSectorPressure();
 
   setScreenActions("");
 
@@ -690,6 +774,63 @@ function renderExecutiveScreen() {
       <article class="stat-card"><span>${getFieldLabel("decisionNeededToday", "Decision Needed Today")}</span><strong dir="${inferTextDirection(state.data.weeklyFocus.decisions_needed)}">${compactText(state.data.weeklyFocus.decisions_needed, 60)}</strong></article>
       <article class="stat-card"><span>${getFieldLabel("topObjection", "Top Objection")}</span><strong dir="${inferTextDirection(state.data.weeklyFocus.top_objection || metrics.topObjection)}">${compactText(state.data.weeklyFocus.top_objection || metrics.topObjection, 42)}</strong></article>
       <article class="stat-card"><span>${getFieldLabel("replyRate", "Reply Rate")}</span><strong>${Math.round(metrics.replyRate * 100)}%</strong></article>
+    </section>
+
+    <section class="ops-scan-grid">
+      <article class="panel source-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-label">${copy().chrome.sections.sourceMixLabel || "Lead Sources"}</p>
+            <h3>${copy().chrome.sections.sourceMixTitle || "Where usable leads are coming from"}</h3>
+          </div>
+        </div>
+        <div class="source-list">
+          ${
+            sourceBreakdown.length
+              ? sourceBreakdown
+                  .map(
+                    (entry) => `
+                      <div class="source-row">
+                        <div>
+                          <strong>${displayChannel(entry.channel)}</strong>
+                          <span>${getFieldLabel("source", "Source")}</span>
+                        </div>
+                        <span class="pill">${entry.count}</span>
+                      </div>
+                    `,
+                  )
+                  .join("")
+              : renderEmptyState()
+          }
+        </div>
+      </article>
+
+      <article class="panel source-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-label">${copy().chrome.sections.focusSectorsLabel || "Priority Sectors"}</p>
+            <h3>${copy().chrome.sections.focusSectorsTitle || "Where we should hunt this week"}</h3>
+          </div>
+        </div>
+        <div class="sector-pressure-list">
+          ${sectorPressure
+            .map(
+              ({ sector, liveLeads, liveOpportunities }) => `
+                <div class="sector-pressure-row ${sector.is_active ? "active" : ""}">
+                  <div>
+                    <strong>${sector.sector_name}</strong>
+                    <span>${displayPriority(sector.priority)} • ${displayStage(getComputedSectorStatus(sector, today))}</span>
+                  </div>
+                  <div class="pressure-metrics">
+                    <small>${getFieldLabel("liveLeads", "Active leads")} ${liveLeads}</small>
+                    <small>${getFieldLabel("liveOpportunities", "Active opportunities")} ${liveOpportunities}</small>
+                  </div>
+                </div>
+              `,
+            )
+            .join("")}
+        </div>
+      </article>
     </section>
 
     <section class="section-heading">
@@ -750,6 +891,7 @@ function renderExecutiveScreen() {
                           (item) => `
                             <button class="queue-item" type="button" data-open-record="${item.kind}:${item.id}">
                               <strong>${item.title}</strong>
+                              <span class="queue-context" dir="auto">${getQueueContext(item)}</span>
                               <span class="queue-meta" dir="auto">${displayAgentKey(item.owner)} • ${displayStage(item.stage)}</span>
                               <bdi class="queue-action" dir="${inferTextDirection(item.next_step)}">${compactText(item.next_step, 42)}</bdi>
                               <small class="queue-date" dir="ltr">${shortDate(item.next_step_date)}</small>
@@ -857,7 +999,7 @@ function renderLeadCard(lead) {
       </div>
       <div class="meta-list">
         <span class="mixed-meta" dir="auto">${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}</span>
-        <span dir="auto">${displayChannel(lead.channel)} • ${getFieldLabel("score", "Score")} ${lead.lead_score || 0}</span>
+        <span dir="auto"><span class="source-badge">${displayChannel(lead.channel)}</span> • ${getFieldLabel("score", "Score")} ${lead.lead_score || 0}</span>
         <span dir="auto">${displayUrgency(lead.urgency_level || "None")} • ${displayDecisionLevel(lead.decision_level || "Unknown")}</span>
       </div>
       ${
@@ -1293,7 +1435,9 @@ function renderCreateForm(entityType) {
           <label><span>${getFormLabel("sectorId", "sector_id")}</span><select name="sector_id">${activeSectors.map((sector) => `<option value="${sector.id}">${sector.sector_name}</option>`).join("")}</select></label>
           <label><span>${getFormLabel("contactName", "contact_name")}</span><input name="contact_name" required /></label>
           <label><span>${getFormLabel("role", "role")}</span><input name="role" /></label>
-          <label><span>${getFieldLabel("channel", "Channel")}</span><select name="channel"><option value="WhatsApp">${displayChannel("WhatsApp")}</option><option value="Call">${displayChannel("Call")}</option><option value="LinkedIn">${displayChannel("LinkedIn")}</option></select></label>
+          <label><span>${getFieldLabel("channel", "Channel")}</span><select name="channel">${getChannelOptions()
+            .map((channel) => `<option value="${channel}">${displayChannel(channel)}</option>`)
+            .join("")}</select></label>
           <label><span>${getFormLabel("owner", "owner")}</span><select name="owner"><option value="Agent 2">${displayAgentKey("Agent 2")}</option></select></label>
           <label><span>${getFormLabel("currentStage", "current_stage")}</span><select name="current_stage">${LEAD_STAGES.filter((stage) => stage !== "Delayed").map((stage) => `<option value="${stage}">${displayStage(stage)}</option>`).join("")}</select></label>
           <label><span>${getFormLabel("painSignal", "pain_signal")}</span><textarea name="pain_signal"></textarea></label>

@@ -277,9 +277,9 @@ button {
 
 .filters {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
-  opacity: 0.92;
+  opacity: 0.9;
 }
 
 .filters label,
@@ -299,11 +299,11 @@ button {
 .drawer-section select,
 .drawer-section textarea {
   width: 100%;
-  min-height: 38px;
+  min-height: 34px;
   border: 1px solid var(--stroke);
   background: rgba(255, 255, 255, 0.8);
   color: var(--text);
-  padding: 8px 10px;
+  padding: 7px 10px;
   border-radius: 10px;
 }
 
@@ -318,6 +318,7 @@ button {
 }
 
 .hero-grid,
+.ops-scan-grid,
 .agent-grid,
 .queue-grid,
 .stat-strip,
@@ -411,6 +412,10 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.ops-scan-grid {
+  grid-template-columns: 1.1fr 1fr;
 }
 
 .panel {
@@ -537,10 +542,15 @@ button {
 }
 
 .queue-meta,
+.queue-context,
 .mixed-meta {
   color: var(--muted);
   font-size: 0.8rem;
   unicode-bidi: plaintext;
+}
+
+.queue-context {
+  font-size: 0.78rem;
 }
 
 .queue-action {
@@ -557,6 +567,60 @@ button {
 
 .panel:has(.queue-item) .pill {
   font-size: 0.72rem;
+}
+
+.source-list,
+.sector-pressure-list {
+  display: grid;
+  gap: 8px;
+}
+
+.source-row,
+.sector-pressure-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: var(--panel-soft);
+}
+
+.source-row strong,
+.sector-pressure-row strong {
+  display: block;
+  margin-bottom: 2px;
+  line-height: 1.25;
+}
+
+.source-row span,
+.sector-pressure-row span,
+.pressure-metrics small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.sector-pressure-row.active {
+  border-color: rgba(15, 94, 93, 0.26);
+  background: linear-gradient(140deg, rgba(15, 94, 93, 0.11), rgba(255, 255, 255, 0.94));
+}
+
+.pressure-metrics {
+  display: grid;
+  gap: 3px;
+  text-align: end;
+}
+
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
 .list-detail-layout {
@@ -863,6 +927,7 @@ html[dir="rtl"] .drawer {
   }
 
   .hero-grid,
+  .ops-scan-grid,
   .stat-strip,
   .stat-strip.secondary,
   .agent-grid.compact,

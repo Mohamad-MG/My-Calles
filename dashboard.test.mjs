@@ -180,12 +180,13 @@ test("display maps stay canonical-key based across locales", () => {
   assert.equal(arDisplay.breakOptions["Offer clarity"], "وضوح العرض");
 });
 
-test("locale seed factories preserve shared domain shape in phase 1", () => {
+test("locale seed factories preserve shared domain parity", () => {
   const seed = createSeedData();
   const enSeed = getLocaleSeedFactory("en")(seed);
   const arSeed = getLocaleSeedFactory("ar")(seed);
 
-  assert.equal(enSeed.sectors.length, seed.sectors.length);
-  assert.equal(arSeed.leads.length, seed.leads.length);
-  assert.equal(arSeed.opportunities.length, seed.opportunities.length);
+  assert.equal(enSeed.sectors.length, arSeed.sectors.length);
+  assert.equal(enSeed.leads.length, arSeed.leads.length);
+  assert.equal(enSeed.opportunities.length, arSeed.opportunities.length);
+  assert.equal(enSeed.weeklyFocus.active_sector_id, arSeed.weeklyFocus.active_sector_id);
 });
