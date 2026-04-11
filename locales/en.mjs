@@ -28,7 +28,6 @@ const enLocale = {
       rules: [
         "A reply is not an opportunity.",
         "No proposal without readiness.",
-        "Every record needs a concrete next step.",
       ],
     },
     filters: {
