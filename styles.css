@@ -53,18 +53,18 @@
 
   /* Flat shadows — controlled depth, not blur-heavy */
   --shadow-xs:  0 1px 2px rgba(0,0,0,0.03);
-  --shadow-sm:  0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.05);
   --shadow-md:  0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -1px rgba(0,0,0,0.04);
   --shadow-lg:  0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.04);
   --shadow-xl:  none;
 
   /* Radii — structured, minimal curves */
-  --r-xs:  4px;
-  --r-sm:  6px;
-  --r-md:  8px;
+  --r-xs:  6px;
+  --r-sm:  8px;
+  --r-md:  10px;
   --r-lg:  12px;
-  --r-xl:  16px;
-  --r-2xl: 20px;
+  --r-xl:  14px;
+  --r-2xl: 16px;
 
   /* Topbar height */
   --topbar-h: 60px;
@@ -79,9 +79,10 @@
   --card-primary-shadow: var(--shadow-md);
 
   --card-secondary-bg:   #FFFFFF;
+  --card-secondary-border: var(--border-strong);
   --card-secondary-shadow: var(--shadow-sm);
 
-  --card-passive-bg:   #F7F8FA; /* muted */
+  --card-passive-bg:   #FAFAFA; /* muted */
   --card-passive-shadow: none;
 
   /* Hero action panel — solid commanding block */
@@ -506,6 +507,8 @@ h4 { font-size: 0.875rem; }
 
 /* ── Buttons ──────────────────────────────────────────────────── */
 .primary-button,
+.success-button,
+.danger-button,
 .ghost-button,
 .icon-button {
   display: inline-flex;
@@ -515,37 +518,68 @@ h4 { font-size: 0.875rem; }
   font-size: 0.8125rem;
   font-weight: 600;
   padding: 7px 14px;
-  transition: all 0.12s ease;
   border: 1px solid transparent;
   white-space: nowrap;
+  transition: all 120ms ease;
+}
+
+.primary-button:hover,
+.success-button:hover,
+.danger-button:hover,
+.ghost-button:hover,
+.icon-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.primary-button:active,
+.success-button:active,
+.danger-button:active,
+.ghost-button:active,
+.icon-button:active {
+  transform: translateY(0);
 }
 
 .primary-button {
-  background: var(--accent);
+  background: #2563EB;
   color: #fff;
   border-color: rgba(255,255,255,0.1);
   box-shadow: var(--shadow-sm), 0 0 0 1px rgba(37,99,235,0.3) inset;
 }
-.primary-button:hover {
-  background: var(--accent-hover);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+.primary-button:hover { background: #1D4ED8; }
+
+.success-button {
+  background: #16A34A;
+  color: #fff;
+  border-color: rgba(255,255,255,0.1);
+  box-shadow: var(--shadow-sm), 0 0 0 1px rgba(22,163,74,0.3) inset;
 }
-.primary-button:active { transform: translateY(0); }
+.success-button:hover { background: #15803D; }
+
+.danger-button {
+  background: #DC2626;
+  color: #fff;
+  border-color: rgba(255,255,255,0.1);
+  box-shadow: var(--shadow-sm), 0 0 0 1px rgba(220,38,38,0.3) inset;
+}
+.danger-button:hover { background: #B91C1C; }
 
 .ghost-button {
-  background: var(--canvas-elevated);
+  background: #FFFFFF;
   border-color: var(--border-strong);
   color: var(--text-primary);
   box-shadow: var(--shadow-xs);
 }
 .ghost-button:hover {
-  background: var(--canvas-sunken);
+  background: #FAFAFA;
+  color: #2563EB;
   border-color: var(--border-strong);
 }
 
 .ghost-button.tight,
-.primary-button.tight { padding: 5px 10px; font-size: 0.78rem; }
+.primary-button.tight,
+.success-button.tight,
+.danger-button.tight { padding: 5px 10px; font-size: 0.78rem; }
 
 .icon-button {
   background: var(--canvas-elevated);
@@ -621,10 +655,10 @@ h4 { font-size: 0.875rem; }
 .kanban-card,
 .kanban-column,
 .source-tab {
-  background: var(--canvas-elevated);
-  border: 1px solid var(--border);
+  background: var(--card-secondary-bg);
+  border: 1px solid var(--card-secondary-border);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--card-secondary-shadow);
 }
 
 /* ── Stat Strip (KPI bar) ─────────────────────────────────────── */
@@ -643,9 +677,9 @@ h4 { font-size: 0.875rem; }
   overflow: hidden;
   transition: box-shadow 0.18s ease, transform 0.18s ease;
   /* Elevated base — KPI cards are primary interface elements */
-  background: var(--canvas-elevated);
-  border: 1px solid var(--border);
-  box-shadow: var(--card-secondary-shadow);
+  background: var(--card-primary-bg);
+  border: 1px solid var(--card-primary-border);
+  box-shadow: var(--card-primary-shadow);
 }
 
 /* Persistent top-edge accent bar (always visible, not just on hover) */
@@ -751,10 +785,13 @@ h4 { font-size: 0.875rem; }
   flex-direction: column;
   gap: 8px;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
+  background: var(--card-primary-bg);
+  border: 1px solid var(--card-primary-border);
+  box-shadow: var(--card-primary-shadow);
 }
 
 .hero-card:hover {
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
   transform: translateY(-1px);
 }
 
@@ -799,8 +836,9 @@ h4 { font-size: 0.875rem; }
 /* ── HERO ACTION PANEL — "Today Action Queue" (2nd panel) ──────── */
 /* Most dominant element on the screen. Dark background = highest authority. */
 .analysis-grid > article.panel:nth-child(2) {
-  background: var(--hero-action-bg);
-  border-color: var(--hero-action-border);
+  background: #1E293B;
+  border: 1px solid #334155;
+  border-inline-start: 4px solid var(--accent);
   box-shadow: var(--hero-action-shadow);
   position: relative;
   overflow: hidden;
@@ -1280,9 +1318,12 @@ html[lang="ar"] .source-layout {
   justify-content: center;
   color: var(--text-tertiary);
   font-size: 0.8125rem;
+  background: var(--card-passive-bg);
+  opacity: 0.7;
 }
 
-.inactive-tray { cursor: pointer; min-height: auto; padding: 10px 14px; display: block; }
+.inactive-tray { cursor: pointer; min-height: auto; padding: 10px 14px; display: block; transition: opacity 0.12s ease; }
+.inactive-tray:hover { opacity: 1; }
 .inactive-tray summary { font-weight: 600; color: var(--text-secondary); font-size: 0.8125rem; cursor: pointer; }
 
 .tray-content { display: flex; gap: 14px; margin-top: 10px; }
@@ -1554,7 +1595,9 @@ html[dir="rtl"] .drawer { box-shadow: -8px 0 40px rgba(0,0,0,0.12); }
   border-radius: var(--r-md);
   padding: 20px;
   text-align: center;
-  background: var(--canvas-sunken);
+  background: var(--card-passive-bg);
+  box-shadow: var(--card-passive-shadow);
+  opacity: 0.7;
 }
 
 .empty-title { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); margin: 0 0 4px; }

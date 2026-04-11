@@ -1306,7 +1306,7 @@ function renderSourceLeadCard(lead) {
       </button>
       ${
         canConvert
-          ? `<div class="source-card-actions"><button class="ghost-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button></div>`
+          ? `<div class="source-card-actions"><button class="success-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button></div>`
           : linkedOpportunity
             ? `<div class="source-card-actions"><button class="ghost-button tight" type="button" data-open-record="opportunity:${linkedOpportunity.id}">${guidanceLabel("openOpportunity")}</button></div>`
             : ""
@@ -1370,7 +1370,7 @@ function renderSourceProgression(source) {
                           <strong>${lead.company_name}</strong>
                           <div class="meta-row">${compactText(lead.handoff_summary, 70)}</div>
                         </div>
-                        <button class="ghost-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button>
+                        <button class="success-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button>
                       </div>
                     `,
                   )
@@ -1596,7 +1596,7 @@ function renderAllLeadCard(lead) {
         <button class="ghost-button tight" type="button" data-open-record="lead:${lead.id}">${copy().meta.lang === "ar" ? "فتح السجل" : "Open lead"}</button>
         ${
           canConvert
-            ? `<button class="ghost-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button>`
+            ? `<button class="success-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button>`
             : linkedOpportunity
               ? `<button class="ghost-button tight" type="button" data-open-record="opportunity:${linkedOpportunity.id}">${guidanceLabel("openOpportunity")}</button>`
               : ""
@@ -1949,7 +1949,7 @@ function renderCreateForm(entityType) {
         <label><span>${getFormLabel("nextStep", "next_step")}</span><input name="next_step" required /></label>
         <label><span>${getFormLabel("nextStepDate", "next_step_date")}</span><input type="date" name="next_step_date" required /></label>
         <div class="form-actions">
-          <button class="primary-button" type="submit">${copy().chrome.buttons.createOpportunity}</button>
+          <button class="success-button" type="submit">${copy().chrome.buttons.createOpportunity}</button>
         </div>
       </form>
     </section>
