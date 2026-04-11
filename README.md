@@ -1,11 +1,13 @@
 # MyCalls Operational Dashboard
 
-Internal dashboard plus lightweight shared backend for running the MyCalls revenue workflow:
-- Executive Focus
-- Sector & Offer Board
-- Pipeline Board
-- Opportunity Board
-- Bottleneck & Performance Board
+Source-first admin dashboard plus lightweight shared backend for running the MyCalls workflow as one shared operational board.
+
+Current release candidate UX:
+- Source tabs as the primary navigation
+- Extraction panel for quick lead capture inside the active source
+- Inbox workflow grouped by source-first stages
+- Progression rail that keeps lead-to-opportunity continuity visible
+- Shared persistent state, audit logging, and validation observability
 
 ## Local Run
 
@@ -30,6 +32,28 @@ The server provides:
 - Lightweight observability for validation
 
 State is stored under `data/` and is shared across sessions.
+
+## Source-First Workflow
+
+The dashboard is now designed for a single `Admin` operator.
+
+Each source tab is a complete execution surface:
+- Capture a new lead directly into the active source
+- Manage the lead inside source inbox buckets
+- Move ready leads into opportunities without leaving the same source context
+
+Display-level inbox buckets:
+- `New`
+- `Needs Extraction`
+- `Needs Reply`
+- `Needs Qualification`
+- `Ready for Handoff`
+- `Closed / Disqualified`
+
+Business rules preserved in this release candidate:
+- No automatic sector activation
+- No duplicate opportunity from the same `origin_lead_id`
+- Funnel logic remains truthful and avoids misleading aggregation
 
 ## API Surface
 
@@ -60,7 +84,9 @@ The dashboard boots through ES modules and now depends on the shared backend API
 
 ## Deployment Note
 
-This project is no longer a GitHub Pages-only static site. It now requires the Node server so the dashboard can use shared state and audit logging.
+This project is no longer a GitHub Pages-only static site. It requires the Node server so the dashboard can use shared state, audit logging, and validation observability.
+
+Deploy through GitHub Actions only by pushing `main`.
 
 ## Supported Runtime Environments
 

@@ -1,20 +1,17 @@
 import {
-  AGENTS,
-  BREAK_OPTIONS,
   LEAD_STAGES,
   OPPORTUNITY_STAGES,
+  SOURCE_WORKFLOW_BUCKETS,
   createSeedData,
   deepClone,
-  getAgentSummaries,
   getComputedLeadStage,
   getLeadGuardFlags,
+  getLeadWorkflowBucket,
   getOpportunityGuardFlags,
   getOpportunityReadinessGaps,
   getComputedOpportunityStage,
   getComputedSectorStatus,
-  getMetrics,
   getRequiredValidationErrors,
-  getTodayQueue,
   hasOpportunityForLead,
   normalizeDashboardState,
   todayDate,
@@ -23,11 +20,7 @@ import {
 } from "./logic.mjs";
 
 const SCREENS = [
-  { key: "executive" },
-  { key: "sectors" },
-  { key: "pipeline" },
-  { key: "opportunities" },
-  { key: "bottleneck" },
+  { key: "sources" },
 ];
 
 const FALLBACK_COPY = {
@@ -43,11 +36,7 @@ const FALLBACK_COPY = {
   },
   chrome: {
     screens: {
-      executive: "Executive Focus",
-      sectors: "Sector & Offer Board",
-      pipeline: "Pipeline Board",
-      opportunities: "Opportunity Board",
-      bottleneck: "Bottleneck & Performance",
+      sources: "Source Operations Board",
     },
     sidebar: {
       weeklyFocusLabel: "Weekly Focus",
@@ -56,8 +45,6 @@ const FALLBACK_COPY = {
     },
     filters: {
       sector: "Sector",
-      source: "Source",
-      owner: "Owner",
       stage: "Stage / Status",
       urgency: "Urgency",
       overdue: "Overdue",
@@ -121,8 +108,6 @@ const FALLBACK_COPY = {
     opportunityStages: {},
     sectorStatuses: {},
     breakOptions: {},
-    agents: {},
-    agentLabels: {},
     guardFlags: {},
     urgency: {},
     priorities: {},
@@ -130,7 +115,6 @@ const FALLBACK_COPY = {
     interestType: {},
     decisionLevel: {},
     channels: {},
-    queueBuckets: {},
   },
   messages: {
     notices: {},
@@ -145,11 +129,10 @@ const state = {
   locale: "en",
   copy: FALLBACK_COPY,
   data: createSeedData(),
-  activeScreen: "executive",
+  activeScreen: "sources",
+  activeSource: "all",
   filters: {
     sector: "all",
-    source: "all",
-    owner: "all",
     stage: "all",
     urgency: "all",
     overdue: "all",
@@ -161,6 +144,7 @@ const state = {
     entityId: null,
     mode: "view",
     message: "",
+    contextSource: "",
   },
   notice: "",
   guidance: null,
@@ -217,14 +201,6 @@ function displayBreakOption(value) {
   return displayFromMap("breakOptions", value);
 }
 
-function displayAgentKey(value) {
-  return displayFromMap("agents", value);
-}
-
-function displayAgentLabel(value) {
-  return displayFromMap("agentLabels", value);
-}
-
 function displayGuardFlag(value) {
   return displayFromMap("guardFlags", value);
 }
@@ -251,10 +227,6 @@ function displayDecisionLevel(value) {
 
 function displayChannel(value) {
   return displayFromMap("channels", value);
-}
-
-function displayQueueBucket(value) {
-  return displayFromMap("queueBuckets", value);
 }
 
 function displayReadinessGap(value) {
@@ -663,122 +635,130 @@ function getLeadById(leadId) {
 }
 
 function getChannelOptions() {
-  return Object.keys(copy()?.display?.channels || {});
+  const seeded = Object.keys(copy()?.display?.channels || {});
+  const live = [
+    ...state.data.leads.map((lead) => lead.channel).filter(Boolean),
+    ...state.data.opportunities
+      .map((opportunity) => getLeadById(opportunity.origin_lead_id)?.channel)
+      .filter(Boolean),
+  ];
+  return [...new Set([...seeded, ...live])];
 }
 
-function getQueueContext(item) {
-  if (item.kind === "lead") {
-    const lead = getLeadById(item.id);
-    const sector = getSectorById(lead?.sector_id);
-    return [displayChannel(lead?.channel), sector?.sector_name].filter(Boolean).join(" • ");
+function getAvailableSources() {
+  return getChannelOptions().filter((channel) =>
+    state.data.leads.some((lead) => lead.channel === channel) ||
+    state.data.opportunities.some(
+      (opportunity) => getLeadById(opportunity.origin_lead_id)?.channel === channel,
+    ),
+  );
+}
+
+function ensureActiveSource() {
+  const sources = getAvailableSources();
+  if (!sources.length) {
+    state.activeSource = "all";
+    return [];
   }
-
-  if (item.kind === "opportunity") {
-    const opportunity = state.data.opportunities.find((entry) => entry.id === item.id);
-    const sector = getSectorById(opportunity?.sector_id);
-    return [getValueLabel("opportunity", "Opportunity"), sector?.sector_name].filter(Boolean).join(" • ");
+  if (!sources.includes(state.activeSource)) {
+    state.activeSource = sources[0];
   }
-
-  return [getValueLabel("sector", "Sector"), displayAgentKey(item.owner)].filter(Boolean).join(" • ");
+  return sources;
 }
 
-function getSourceBreakdown() {
-  const counts = new Map();
-
-  state.data.leads.forEach((lead) => {
-    const key = lead.channel || "Unknown";
-    counts.set(key, (counts.get(key) || 0) + 1);
-  });
-
-  return [...counts.entries()]
-    .map(([channel, count]) => ({ channel, count }))
-    .sort((left, right) => right.count - left.count || left.channel.localeCompare(right.channel));
+function getActiveSource() {
+  ensureActiveSource();
+  return state.activeSource;
 }
 
-function getSectorPressure() {
-  return state.data.sectors
-    .map((sector) => {
-      const liveLeads = state.data.leads.filter(
-        (lead) =>
-          lead.sector_id === sector.id &&
-          !["Disqualified", "No Response"].includes(getComputedLeadStage(lead, todayDate())),
-      ).length;
-      const liveOpportunities = state.data.opportunities.filter(
-        (opportunity) =>
-          opportunity.sector_id === sector.id &&
-          !["Won", "Lost", "Delayed"].includes(getComputedOpportunityStage(opportunity, todayDate())),
-      ).length;
+function leadMatchesCommonFilters(lead) {
+  const today = todayDate();
+  const computedStage = getComputedLeadStage(lead, today);
+  const sector = getSectorById(lead.sector_id);
+  const matchesSector =
+    state.filters.sector === "all" || sector?.id === state.filters.sector;
+  const matchesStage =
+    state.filters.stage === "all" || computedStage === state.filters.stage || lead.current_stage === state.filters.stage;
+  const matchesUrgency =
+    state.filters.urgency === "all" || (lead.urgency_level || "None") === state.filters.urgency;
+  const isOverdue = computedStage === "Delayed";
+  const matchesOverdue =
+    state.filters.overdue === "all" ||
+    (state.filters.overdue === "yes" && isOverdue) ||
+    (state.filters.overdue === "no" && !isOverdue);
+  return matchesSector && matchesStage && matchesUrgency && matchesOverdue;
+}
 
-      return { sector, liveLeads, liveOpportunities };
-    })
-    .sort(
-      (left, right) =>
-        Number(right.sector.is_active) - Number(left.sector.is_active) ||
-        right.liveOpportunities - left.liveOpportunities ||
-        right.liveLeads - left.liveLeads ||
-        (right.sector.score || 0) - (left.sector.score || 0),
+function opportunityMatchesCommonFilters(opportunity) {
+  const today = todayDate();
+  const computedStage = getComputedOpportunityStage(opportunity, today);
+  const sector = getSectorById(opportunity.sector_id);
+  const matchesSector =
+    state.filters.sector === "all" || sector?.id === state.filters.sector;
+  const matchesStage =
+    state.filters.stage === "all" ||
+    computedStage === state.filters.stage ||
+    opportunity.current_stage === state.filters.stage;
+  const matchesUrgency =
+    state.filters.urgency === "all" || (opportunity.risk_flag || "None") === state.filters.urgency;
+  const isOverdue = computedStage === "Delayed";
+  const matchesOverdue =
+    state.filters.overdue === "all" ||
+    (state.filters.overdue === "yes" && isOverdue) ||
+    (state.filters.overdue === "no" && !isOverdue);
+  return matchesSector && matchesStage && matchesUrgency && matchesOverdue;
+}
+
+function getSourceLeads(source = getActiveSource()) {
+  return state.data.leads.filter(
+    (lead) => lead.channel === source && leadMatchesCommonFilters(lead),
+  );
+}
+
+function getSourceOpportunities(source = getActiveSource()) {
+  return state.data.opportunities.filter((opportunity) => {
+    const originLead = getLeadById(opportunity.origin_lead_id);
+    return (
+      originLead?.channel === source &&
+      opportunityMatchesCommonFilters(opportunity)
     );
+  });
+}
+
+function getSourceMetrics(source = getActiveSource()) {
+  const leads = getSourceLeads(source);
+  const opportunities = getSourceOpportunities(source);
+  const readyForHandoff = leads.filter(
+    (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Ready for Handoff",
+  ).length;
+  const needsReply = leads.filter(
+    (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Needs Reply",
+  ).length;
+  return {
+    leads: leads.length,
+    needsReply,
+    readyForHandoff,
+    opportunities: opportunities.length,
+  };
 }
 
 function getFilteredLeads() {
-  const today = todayDate();
-  return state.data.leads.filter((lead) => {
-    const computedStage = getComputedLeadStage(lead, today);
-    const sector = getSectorById(lead.sector_id);
-    const matchesSector =
-      state.filters.sector === "all" || sector?.id === state.filters.sector;
-    const matchesSource =
-      state.filters.source === "all" || lead.channel === state.filters.source;
-    const matchesOwner = state.filters.owner === "all" || lead.owner === state.filters.owner;
-    const matchesStage =
-      state.filters.stage === "all" || computedStage === state.filters.stage || lead.current_stage === state.filters.stage;
-    const matchesUrgency =
-      state.filters.urgency === "all" || (lead.urgency_level || "None") === state.filters.urgency;
-    const isOverdue = computedStage === "Delayed";
-    const matchesOverdue =
-      state.filters.overdue === "all" ||
-      (state.filters.overdue === "yes" && isOverdue) ||
-      (state.filters.overdue === "no" && !isOverdue);
-    return matchesSector && matchesSource && matchesOwner && matchesStage && matchesUrgency && matchesOverdue;
-  });
+  return getSourceLeads();
 }
 
 function getFilteredOpportunities() {
-  const today = todayDate();
-  return state.data.opportunities.filter((opportunity) => {
-    const computedStage = getComputedOpportunityStage(opportunity, today);
-    const sector = getSectorById(opportunity.sector_id);
-    const originLead = getLeadById(opportunity.origin_lead_id);
-    const matchesSector =
-      state.filters.sector === "all" || sector?.id === state.filters.sector;
-    const matchesSource =
-      state.filters.source === "all" || originLead?.channel === state.filters.source;
-    const matchesOwner = state.filters.owner === "all" || opportunity.owner === state.filters.owner;
-    const matchesStage =
-      state.filters.stage === "all" ||
-      computedStage === state.filters.stage ||
-      opportunity.current_stage === state.filters.stage;
-    const matchesUrgency =
-      state.filters.urgency === "all" || (opportunity.risk_flag || "None") === state.filters.urgency;
-    const isOverdue = computedStage === "Delayed";
-    const matchesOverdue =
-      state.filters.overdue === "all" ||
-      (state.filters.overdue === "yes" && isOverdue) ||
-      (state.filters.overdue === "no" && !isOverdue);
-    return matchesSector && matchesSource && matchesOwner && matchesStage && matchesUrgency && matchesOverdue;
-  });
+  return getSourceOpportunities();
 }
 
 function getFilteredSectors() {
   const today = todayDate();
   return state.data.sectors.filter((sector) => {
     const computedStatus = getComputedSectorStatus(sector, today);
+    const activeSource = getActiveSource();
     const hasSourceLead =
-      state.filters.source === "all" ||
-      state.data.leads.some((lead) => lead.sector_id === sector.id && lead.channel === state.filters.source);
+      state.data.leads.some((lead) => lead.sector_id === sector.id && lead.channel === activeSource);
     const matchesSector =
       state.filters.sector === "all" || sector.id === state.filters.sector;
-    const matchesOwner = state.filters.owner === "all" || sector.owner === state.filters.owner;
     const matchesStage =
       state.filters.stage === "all" || sector.status === state.filters.stage || computedStatus === state.filters.stage;
     const matchesUrgency = state.filters.urgency === "all" || sector.priority === state.filters.urgency;
@@ -787,7 +767,7 @@ function getFilteredSectors() {
       state.filters.overdue === "all" ||
       (state.filters.overdue === "yes" && isOverdue) ||
       (state.filters.overdue === "no" && !isOverdue);
-    return hasSourceLead && matchesSector && matchesOwner && matchesStage && matchesUrgency && matchesOverdue;
+    return hasSourceLead && matchesSector && matchesStage && matchesUrgency && matchesOverdue;
   });
 }
 
@@ -804,6 +784,7 @@ function closeDrawer() {
     entityId: null,
     mode: "view",
     message: "",
+    contextSource: "",
   };
   renderDrawer();
 }
@@ -844,9 +825,6 @@ function renderFilters() {
   const sectorOptions = state.data.sectors
     .map((sector) => `<option value="${sector.id}">${sector.sector_name}</option>`)
     .join("");
-  const sourceOptions = getChannelOptions()
-    .map((channel) => `<option value="${channel}">${displayChannel(channel)}</option>`)
-    .join("");
   const stageOptions = [...new Set([...LEAD_STAGES, ...OPPORTUNITY_STAGES, "Active", "Testing", "Paused", "Rejected"])]
     .map((stage) => `<option value="${stage}">${displayStage(stage)}</option>`)
     .join("");
@@ -857,22 +835,6 @@ function renderFilters() {
       <select data-filter="sector">
         <option value="all">${copy().chrome.filters.all}</option>
         ${sectorOptions}
-      </select>
-    </label>
-    <label>
-      <span>${copy().chrome.filters.source}</span>
-      <select data-filter="source">
-        <option value="all">${copy().chrome.filters.all}</option>
-        ${sourceOptions}
-      </select>
-    </label>
-    <label>
-      <span>${copy().chrome.filters.owner}</span>
-      <select data-filter="owner">
-        <option value="all">${copy().chrome.filters.all}</option>
-        <option value="Agent 1">${displayAgentKey("Agent 1")}</option>
-        <option value="Agent 2">${displayAgentKey("Agent 2")}</option>
-        <option value="Agent 3">${displayAgentKey("Agent 3")}</option>
       </select>
     </label>
     <label>
@@ -928,6 +890,33 @@ function setScreenActions(html) {
 }
 
 function attachActionListeners() {
+  const handleScreenAction = async (action) => {
+    if (action === "restore-seed") {
+      await resetToSeed();
+      renderApp();
+    }
+    if (action === "reset-local") {
+      await resetToSeed({ clearStorage: true });
+      renderApp();
+    }
+    if (action === "new-sector") {
+      setDrawer({ open: true, kind: "create", entityType: "sector", mode: "create", message: "" });
+    }
+    if (action === "new-lead") {
+      setDrawer({
+        open: true,
+        kind: "create",
+        entityType: "lead",
+        mode: "create",
+        message: "",
+        contextSource: getActiveSource(),
+      });
+    }
+    if (action === "new-opportunity") {
+      setDrawer({ open: true, kind: "create", entityType: "opportunity", mode: "create", message: "" });
+    }
+  };
+
   elements.content.querySelectorAll("[data-guidance-dismiss]").forEach((button) => {
     button.addEventListener("click", () => {
       setGuidance(null);
@@ -956,6 +945,7 @@ function attachActionListeners() {
           entityType: button.dataset.guidanceEntity,
           mode: "create",
           message: "",
+          contextSource: button.dataset.guidanceEntity === "lead" ? getActiveSource() : "",
         });
       }
       if (actionType === "convert-lead" && button.dataset.guidanceLead) {
@@ -964,32 +954,15 @@ function attachActionListeners() {
     });
   });
 
-  elements.screenActions.querySelectorAll("[data-action]").forEach((button) => {
+  [elements.screenActions, elements.content].forEach((scope) => scope?.querySelectorAll("[data-action]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const action = button.dataset.action;
       try {
-        if (action === "restore-seed") {
-          await resetToSeed();
-          renderApp();
-        }
-        if (action === "reset-local") {
-          await resetToSeed({ clearStorage: true });
-          renderApp();
-        }
-        if (action === "new-sector") {
-          setDrawer({ open: true, kind: "create", entityType: "sector", mode: "create", message: "" });
-        }
-        if (action === "new-lead") {
-          setDrawer({ open: true, kind: "create", entityType: "lead", mode: "create", message: "" });
-        }
-        if (action === "new-opportunity") {
-          setDrawer({ open: true, kind: "create", entityType: "opportunity", mode: "create", message: "" });
-        }
+        await handleScreenAction(button.dataset.action);
       } catch {
         // Notice is already set by the mutation helper.
       }
     });
-  });
+  }));
 }
 
 function renderNotice() {
@@ -1013,257 +986,173 @@ function renderNotice() {
   `;
 }
 
-function formatAgentMission(agent, metrics) {
-  if (agent.entity === "sector") {
-    return agent.currentMission;
-  }
-
-  if (agent.entity === "lead") {
-    return copy().meta.lang === "ar"
-      ? `${metrics.targeted} ${displayStage("Targeted")} / ${metrics.qualified} ${displayStage("Qualified")}`
-      : `${metrics.targeted} targeted / ${metrics.qualified} qualified`;
-  }
-
-  return copy().meta.lang === "ar"
-    ? `${metrics.discoveries} ${getFieldLabel("discoveries", "Discoveries")} / ${formatCurrency(metrics.pipelineValue)}`
-    : `${metrics.discoveries} discoveries / ${formatCurrency(metrics.pipelineValue)} pipeline`;
+function displayWorkflowBucket(bucket) {
+  const labels = {
+    New: copy().meta.lang === "ar" ? "جديد" : "New",
+    "Needs Extraction": copy().meta.lang === "ar" ? "يحتاج استخراج" : "Needs Extraction",
+    "Needs Reply": copy().meta.lang === "ar" ? "يحتاج رد" : "Needs Reply",
+    "Needs Qualification": copy().meta.lang === "ar" ? "يحتاج تأهيل" : "Needs Qualification",
+    "Ready for Handoff": copy().meta.lang === "ar" ? "جاهز للتحويل" : "Ready for Handoff",
+    "Closed / Disqualified": copy().meta.lang === "ar" ? "مغلق / مستبعد" : "Closed / Disqualified",
+  };
+  return labels[bucket] || bucket;
 }
 
-function renderOrganicLeadHuntingBoard() {
-  const activeSector = getSectorById(state.data.weeklyFocus.active_sector_id);
-  const activeSectorId = activeSector?.id;
-  
-  const sectorLeads = state.data.leads.filter(l => l.sector_id === activeSectorId);
-  const qualifiedLeads = sectorLeads.filter(l => l.current_stage === "Qualified" || l.current_stage === "Meeting Booked" || l.current_stage === "Handoff Sent");
-  
-  const sectorOpps = state.data.opportunities.filter(o => o.sector_id === activeSectorId);
-  const opportunities = sectorOpps.filter(o => o.current_stage !== "Won" && o.current_stage !== "Lost");
-  
-  const definedChannels = getChannelOptions();
-  const allChannels = definedChannels.length > 0 ? definedChannels : ["Email", "WhatsApp", "LinkedIn", "X/Twitter", "Google Inbound", "Competitor"];
-  
-  const activeChannelBlocks = [];
-  const inactiveChannels = [];
+function getSourceTabSummary(source) {
+  const metrics = getSourceMetrics(source);
+  return copy().meta.lang === "ar"
+    ? `${metrics.leads} جهة • ${metrics.opportunities} فرصة`
+    : `${metrics.leads} leads • ${metrics.opportunities} opportunities`;
+}
 
-  allChannels.forEach(channelKey => {
-      const leadsInChannel = sectorLeads.filter(l => l.channel === channelKey);
-      const oppsInChannel = sectorOpps.filter(o => {
-          const originLead = getLeadById(o.origin_lead_id);
-          return originLead?.channel === channelKey;
-      });
-      
-      if (leadsInChannel.length === 0 && oppsInChannel.length === 0) {
-          inactiveChannels.push(channelKey);
-      } else {
-          const totalSent = leadsInChannel.length; 
-          const replies = leadsInChannel.filter(l => l.current_stage !== "Targeted" && l.current_stage !== "New").length;
-          
-          let queueItemsHtml = "";
-          const activeQueueLeads = leadsInChannel.filter(l => !["Qualified", "Meeting Booked", "Handoff Sent", "Disqualified", "No Response"].includes(l.current_stage));
-          
-          if (activeQueueLeads.length === 0) {
-              queueItemsHtml = `<div class="zero-state-placeholder">No pending actions</div>`;
-          } else {
-              queueItemsHtml = activeQueueLeads.map(l => {
-                  let priority = "wait"; 
-                  let label = "WAIT";
-                  let actionText = l.next_step || l.company_name;
-                  
-                  if (["Targeted", "New"].includes(l.current_stage)) {
-                      priority = "now"; label = "NOW"; actionText = "Send opener: " + l.company_name;
-                  } else if (l.current_stage === "Replied" || (l.next_step && l.next_step.toLowerCase().includes("qualify"))) {
-                      priority = "now"; label = "NOW"; actionText = "Qualify " + l.company_name;
-                  } else if (["Engaged", "Negotiation"].includes(l.current_stage)) {
-                      priority = "next"; label = "NEXT"; actionText = l.next_step || ("Follow up " + l.company_name);
-                  }
-                  
-                  return `<div class="action-item"><span class="badge ${priority}">${label}</span> ${compactText(actionText, 35)}</div>`;
-              }).join("");
-          }
-
-          const hasBottleneck = leadsInChannel.some(l => l.current_stage === "Delayed");
-          const bottleneckHtml = hasBottleneck ? 
-             `<div class="bottleneck">🔴 Attention Needed</div>` : 
-             `<div class="bottleneck ok">🟢 Healthy</div>`;
-             
-          activeChannelBlocks.push(`
-            <div class="channel-block">
-              <div class="channel-head">${displayChannel(channelKey)} <span style="font-size: 0.8rem; font-weight: normal; color: var(--muted);">(${totalSent} leads)</span></div>
-              <div class="channel-metrics meta-row">${totalSent} targeted | ${replies} engaged</div>
-              ${bottleneckHtml}
-              <div class="action-queue">${queueItemsHtml}</div>
-            </div>
-          `);
-      }
-  });
-
-  const rawSignalsCount = sectorLeads.length;
-  const highIntentCount = qualifiedLeads.length + opportunities.length;
-
-  setScreenActions("");
-
-  if (!activeSector) {
-    return `
-      <div class="empty-state">
-        <p class="empty-title">${getValueLabel("noActiveSector", "No active sector")}</p>
-        <p class="empty-copy">${getValueLabel("selectOneSector", "Select one sector only and focus it hard.")}</p>
-      </div>
-    `;
-  }
+function renderSourceTabs() {
+  const sources = ensureActiveSource();
 
   return `
-    <div class="org-hunting-board">
-      <div class="command-strip">
-        <div class="target-block">
-          <p class="eyebrow">Today Target &mdash; ${activeSector?.sector_name || "Any"} (Active Sources Only)</p>
-          <div class="target-metrics">
-            <span><strong>${rawSignalsCount}</strong> Signals</span>
-            <span><strong>${highIntentCount}</strong> High Intent</span>
-            <span><strong>${qualifiedLeads.length}</strong> Qual</span>
-          </div>
-        </div>
-        <div class="sector-control">
-          <p class="eyebrow">Sector Focus</p>
-          <div class="sector-toggles" style="display: flex; gap: 8px;">
-            ${state.data.sectors.map(s => `
-              <button type="button" class="focus-chip ${s.id === activeSectorId ? 'active' : ''}" data-set-active="${s.id}" style="border:none; cursor:pointer;" title="${s.sector_name}">
-                ${s.sector_name}
-              </button>
-            `).join('')}
-          </div>
-        </div>
-      </div>
-
-      <div class="ops-layout">
-        <aside class="left-rail">
-          <div class="rail-section">
-            <h4 class="rail-header">▼ Signal Triage</h4>
-            <div class="triage-box">
-               <div style="margin-bottom: 6px;"><span class="pill">${rawSignalsCount}</span> Raw Signals</div>
-              <div style="margin-bottom: 12px;"><span class="pill danger">🔥 ${highIntentCount}</span> High Intent</div>
-              <button class="ghost-button tight">Review High Intent</button>
-            </div>
-          </div>
-          <div class="rail-section">
-            <h4 class="rail-header">▼ Leads Qualified <span class="pill">${qualifiedLeads.length}</span></h4>
-            <div class="rail-list">
-              ${qualifiedLeads.length ? qualifiedLeads.map(l => `
-                <div class="rail-item">
-                  <strong>${l.company_name}</strong>
-                  <div class="meta-row">↳ ${displayChannel(l.channel) || "Direct"}</div>
-                </div>
-              `).join('') : '<div class="zero-state-placeholder" style="min-height: 40px; border:none;">None</div>'}
-            </div>
-          </div>
-          <div class="rail-section">
-            <h4 class="rail-header">▼ Opportunities <span class="pill">${opportunities.length}</span></h4>
-            <div class="rail-list">
-              ${opportunities.length ? opportunities.map(o => {
-                const originLead = getLeadById(o.origin_lead_id);
-                return `
-                <div class="rail-item">
-                  <strong>${o.company_name}</strong>
-                  <div class="meta-row">↳ ${displayChannel(originLead?.channel) || "Direct"}</div>
-                </div>
-                `
-              }).join('') : '<div class="zero-state-placeholder" style="min-height: 40px; border:none;">None</div>'}
-            </div>
-          </div>
-        </aside>
-
-        <section class="main-execution-grid">
-          <div class="channel-blocks">
-            ${activeChannelBlocks.length ? activeChannelBlocks.join('') : '<div class="zero-state-placeholder" style="grid-column: 1 / -1; width: 100%;">No active channels heavily used in this sector.</div>'}
-          </div>
-          
-          <details class="inactive-tray">
-            <summary>▼ INACTIVE / UNUSED SOURCES (${activeSector?.sector_name || "Any"})</summary>
-            <div class="tray-content" style="flex-wrap: wrap;">
-              ${inactiveChannels.map(ch => `<span class="pill">${displayChannel(ch)}</span>`).join('')}
-            </div>
-          </details>
-        </section>
-      </div>
+    <div class="source-tabs">
+      ${sources
+        .map(
+          (source) => `
+            <button
+              class="source-tab ${source === getActiveSource() ? "active" : ""}"
+              type="button"
+              data-source-tab="${source}"
+            >
+              <strong>${displayChannel(source)}</strong>
+              <span>${getSourceTabSummary(source)}</span>
+            </button>
+          `,
+        )
+        .join("")}
     </div>
   `;
 }
 
-function renderExecutiveScreen() {
-  return renderOrganicLeadHuntingBoard();
+function renderExtractionPanel(source) {
+  const metrics = getSourceMetrics(source);
+  return `
+    <article class="panel source-panel extraction-panel">
+      <div class="panel-head">
+        <div>
+          <p class="panel-label">${copy().meta.lang === "ar" ? "الاستخراج" : "Extraction"}</p>
+          <h3>${displayChannel(source)}</h3>
+        </div>
+        <button class="primary-button tight" type="button" data-action="new-lead">${copy().chrome.buttons.newLead}</button>
+      </div>
+      <div class="detail-grid tight">
+        <div><span>${copy().meta.lang === "ar" ? "الإشارات داخل القناة" : "Signals in source"}</span><strong>${metrics.leads}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "تحتاج رد" : "Need reply"}</span><strong>${metrics.needsReply}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for handoff"}</span><strong>${metrics.readyForHandoff}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "فرص ناتجة" : "Progressed opportunities"}</span><strong>${metrics.opportunities}</strong></div>
+      </div>
+      <p class="card-summary">
+        ${
+          copy().meta.lang === "ar"
+            ? "استخدم هذا التبويب لتسجيل lead جديدة من نفس القناة بسرعة ثم تحريكها داخل inbox واضح حتى التحويل إلى فرصة."
+            : "Use this tab to capture new leads from the same source quickly, then move them through a clear inbox until handoff and opportunity creation."
+        }
+      </p>
+    </article>
+  `;
 }
 
-function oldRenderExecutiveScreen() {
-  const today = todayDate();
-  const metrics = getMetrics(state.data, today);
-  const queue = getTodayQueue(state.data, today);
-  const queueGroups = ["Overdue", "Due Today", "Upcoming"];
-  const agentSummaries = getAgentSummaries(state.data, today);
-  const activeSector = getSectorById(state.data.weeklyFocus.active_sector_id);
-  const sourceBreakdown = getSourceBreakdown().slice(0, 5);
-  const sectorPressure = getSectorPressure();
-
-  setScreenActions("");
+function renderSourceLeadCard(lead) {
+  const sector = getSectorById(lead.sector_id);
+  const computedStage = getComputedLeadStage(lead, todayDate());
+  const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
+  const linkedOpportunity = getOpportunityByLeadId(lead.id);
+  const canConvert =
+    workflowBucket === "Ready for Handoff" &&
+    lead.current_stage === "Handoff Sent" &&
+    lead.handoff_summary &&
+    !linkedOpportunity;
 
   return `
-    <section class="stat-strip">
-      <article class="stat-card accent-stat"><span>${getFieldLabel("pipelineValue", "Pipeline Value")}</span><strong>${formatCurrency(metrics.pipelineValue)}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("wins", "Wins")}</span><strong>${metrics.wins}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("proposals", "Proposals")}</span><strong>${metrics.proposals}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("demos", "Demos")}</span><strong>${metrics.demos}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("qualified", "Qualified")}</span><strong>${metrics.qualified}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("targeted", "Targeted")}</span><strong>${metrics.targeted}</strong></article>
-    </section>
+    <article class="source-card">
+      <button class="source-card-main" type="button" data-open-record="lead:${lead.id}">
+        <div class="kanban-top">
+          <div>
+            <strong dir="${inferTextDirection(lead.company_name)}">${lead.company_name}</strong>
+            <span class="mixed-meta" dir="auto">${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}</span>
+          </div>
+          <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${displayStage(computedStage)}</span>
+        </div>
+        <div class="meta-list">
+          <span dir="auto"><span class="source-badge">${displayChannel(lead.channel)}</span> • ${sector?.sector_name || "—"}</span>
+          <span dir="${inferTextDirection(lead.pain_signal || lead.notes)}">${compactText(lead.pain_signal || lead.notes || getValueLabel("noSignalCaptured", "No signal captured yet."), 72)}</span>
+        </div>
+        <div class="card-footer">
+          <small class="card-next" dir="${inferTextDirection(lead.next_step)}">${compactText(lead.next_step || "—", 42)}</small>
+          <small dir="ltr">${shortDate(lead.next_step_date)}</small>
+        </div>
+      </button>
+      ${
+        canConvert
+          ? `<div class="source-card-actions"><button class="ghost-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button></div>`
+          : linkedOpportunity
+            ? `<div class="source-card-actions"><button class="ghost-button tight" type="button" data-open-record="opportunity:${linkedOpportunity.id}">${guidanceLabel("openOpportunity")}</button></div>`
+            : ""
+      }
+    </article>
+  `;
+}
 
-    <section class="hero-grid dense">
-      <article class="hero-card accent">
-        <p class="panel-label">${getFieldLabel("activeSector", "Active Sector")}</p>
-        <h3 dir="${inferTextDirection(activeSector?.sector_name)}">${activeSector?.sector_name || getValueLabel("noActiveSector", "No active sector")}</h3>
-        <p dir="${inferTextDirection(activeSector?.icp)}">${compactText(activeSector?.icp || getValueLabel("selectOneSector", "Select one sector only and focus it hard."), 88)}</p>
-      </article>
-      <article class="hero-card">
-        <p class="panel-label">${getFieldLabel("currentOffer", "Current Offer")}</p>
-        <h3 dir="${inferTextDirection(state.data.weeklyFocus.current_offer)}">${compactText(state.data.weeklyFocus.current_offer, 44)}</h3>
-        <p dir="${inferTextDirection(activeSector?.offer_angle)}">${compactText(activeSector?.offer_angle || getValueLabel("noActiveOffer", "No active offer"), 72)}</p>
-      </article>
-      <article class="hero-card">
-        <p class="panel-label">${getFieldLabel("weeklyTarget", "Weekly Target")}</p>
-        <h3 dir="${inferTextDirection(state.data.weeklyFocus.weekly_target)}">${compactText(state.data.weeklyFocus.weekly_target, 58)}</h3>
-        <p dir="${inferTextDirection(state.data.weeklyFocus.decisions_needed)}">${compactText(state.data.weeklyFocus.decisions_needed, 58)}</p>
-      </article>
-      <article class="hero-card danger">
-        <p class="panel-label">${getFieldLabel("currentBottleneck", "Current Bottleneck")}</p>
-        <h3>${displayBreakOption(metrics.breakSuggestion)}</h3>
-        <p dir="${inferTextDirection(metrics.topObjection)}">${compactText(metrics.topObjection, 52)}</p>
-      </article>
+function renderSourceWorkflow(source) {
+  const leads = getSourceLeads(source);
+  return `
+    <section class="source-workflow">
+      ${SOURCE_WORKFLOW_BUCKETS.map((bucket) => {
+        const items = leads.filter(
+          (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === bucket,
+        );
+        return `
+          <article class="panel workflow-column">
+            <header class="kanban-header">
+              <div>
+                <p class="panel-label">${copy().meta.lang === "ar" ? "مرحلة الصندوق" : "Inbox Stage"}</p>
+                <h3>${displayWorkflowBucket(bucket)}</h3>
+              </div>
+              <span class="pill">${items.length}</span>
+            </header>
+            <div class="kanban-stack">
+              ${items.length ? items.map(renderSourceLeadCard).join("") : renderEmptyState()}
+            </div>
+          </article>
+        `;
+      }).join("")}
     </section>
+  `;
+}
 
-    <section class="stat-strip secondary">
-      <article class="stat-card"><span>${getFieldLabel("currentICP", "Current ICP")}</span><strong dir="${inferTextDirection(activeSector?.icp)}">${compactText(activeSector?.icp || "—", 64)}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("decisionNeededToday", "Decision Needed Today")}</span><strong dir="${inferTextDirection(state.data.weeklyFocus.decisions_needed)}">${compactText(state.data.weeklyFocus.decisions_needed, 60)}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("topObjection", "Top Objection")}</span><strong dir="${inferTextDirection(state.data.weeklyFocus.top_objection || metrics.topObjection)}">${compactText(state.data.weeklyFocus.top_objection || metrics.topObjection, 42)}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("replyRate", "Reply Rate")}</span><strong>${Math.round(metrics.replyRate * 100)}%</strong></article>
-    </section>
+function renderSourceProgression(source) {
+  const leads = getSourceLeads(source);
+  const readyLeads = leads.filter(
+    (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Ready for Handoff",
+  );
+  const opportunities = getSourceOpportunities(source);
 
-    <section class="ops-scan-grid">
-      <article class="panel source-panel">
+  return `
+    <aside class="source-progression">
+      <article class="panel rail-panel">
         <div class="panel-head">
           <div>
-            <p class="panel-label">${copy().chrome.sections.sourceMixLabel || "Lead Sources"}</p>
-            <h3>${copy().chrome.sections.sourceMixTitle || "Where usable leads are coming from"}</h3>
+            <p class="panel-label">${copy().meta.lang === "ar" ? "التحويل" : "Progression"}</p>
+            <h3>${copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for Handoff"}</h3>
           </div>
+          <span class="pill">${readyLeads.length}</span>
         </div>
-        <div class="source-list">
+        <div class="rail-list">
           ${
-            sourceBreakdown.length
-              ? sourceBreakdown
+            readyLeads.length
+              ? readyLeads
                   .map(
-                    (entry) => `
-                      <div class="source-row">
+                    (lead) => `
+                      <div class="rail-item action-rail-item">
                         <div>
-                          <strong>${displayChannel(entry.channel)}</strong>
-                          <span>${getFieldLabel("source", "Source")}</span>
+                          <strong>${lead.company_name}</strong>
+                          <div class="meta-row">${compactText(lead.handoff_summary, 70)}</div>
                         </div>
-                        <span class="pill">${entry.count}</span>
+                        <button class="ghost-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button>
                       </div>
                     `,
                   )
@@ -1273,393 +1162,96 @@ function oldRenderExecutiveScreen() {
         </div>
       </article>
 
-      <article class="panel source-panel">
+      <article class="panel rail-panel">
         <div class="panel-head">
           <div>
-            <p class="panel-label">${copy().chrome.sections.focusSectorsLabel || "Priority Sectors"}</p>
-            <h3>${copy().chrome.sections.focusSectorsTitle || "Where we should hunt this week"}</h3>
+            <p class="panel-label">${copy().meta.lang === "ar" ? "الفرص الناتجة" : "Progressed"}</p>
+            <h3>${copy().meta.lang === "ar" ? "فرص هذه القناة" : "Source Opportunities"}</h3>
           </div>
+          <span class="pill">${opportunities.length}</span>
         </div>
-        <div class="sector-pressure-list">
-          ${sectorPressure
-            .map(
-              ({ sector, liveLeads, liveOpportunities }) => `
-                <div class="sector-pressure-row ${sector.is_active ? "active" : ""}">
-                  <div>
-                    <strong>${sector.sector_name}</strong>
-                    <span>${displayPriority(sector.priority)} • ${displayStage(getComputedSectorStatus(sector, today))}</span>
-                  </div>
-                  <div class="pressure-metrics">
-                    <small>${getFieldLabel("liveLeads", "Active leads")} ${liveLeads}</small>
-                    <small>${getFieldLabel("liveOpportunities", "Active opportunities")} ${liveOpportunities}</small>
-                  </div>
-                </div>
-              `,
-            )
-            .join("")}
-        </div>
-      </article>
-    </section>
-
-    <section class="section-heading">
-      <div>
-        <p class="panel-label">${copy().chrome.sections.agentStatusLabel}</p>
-        <h3>${copy().chrome.sections.agentStatusTitle}</h3>
-      </div>
-    </section>
-
-    <section class="agent-grid compact">
-      ${agentSummaries
-        .map(
-          (agent) => `
-            <article class="panel">
-              <div class="panel-head">
-                <div>
-                  <p class="panel-label">${displayAgentKey(agent.key)}</p>
-                  <h3>${displayAgentLabel(agent.key)}</h3>
-                </div>
-                <span class="pill">${getValueLabel("overdueCount", (count) => `${count} overdue`)(agent.overdue)}</span>
-              </div>
-              <p class="agent-mission">${formatAgentMission(agent, metrics)}</p>
-              <div class="agent-stats">
-                <div><span>${getFieldLabel("openItems", "Open items")}</span><strong>${agent.openItems}</strong></div>
-                <div><span>${getFieldLabel("nextAction", "Next action")}</span><strong>${agent.nextAction === "No immediate next step" ? getValueLabel("noImmediateNextStep", "No immediate next step") : agent.nextAction}</strong></div>
-              </div>
-            </article>
-          `,
-        )
-        .join("")}
-    </section>
-
-    <section class="section-heading">
-      <div>
-        <p class="panel-label">${copy().chrome.sections.todayQueueLabel}</p>
-        <h3>${copy().chrome.sections.todayQueueTitle}</h3>
-      </div>
-    </section>
-
-    <section class="queue-grid compact">
-      ${queueGroups
-        .map((bucket) => {
-          const items = queue.filter((item) => item.bucket === bucket);
-          return `
-            <article class="panel">
-              <div class="panel-head">
-                <div>
-                  <p class="panel-label">${copy().chrome.sections.todayQueueLabel}</p>
-                  <h3>${displayQueueBucket(bucket)}</h3>
-                </div>
-                <span class="pill">${items.length}</span>
-              </div>
-              <div class="queue-list">
-                ${
-                  items.length
-                    ? items
-                        .map(
-                          (item) => `
-                            <button class="queue-item" type="button" data-open-record="${item.kind}:${item.id}">
-                              <strong>${item.title}</strong>
-                              <span class="queue-context" dir="auto">${getQueueContext(item)}</span>
-                              <span class="queue-meta" dir="auto">${displayAgentKey(item.owner)} • ${displayStage(item.stage)}</span>
-                              <bdi class="queue-action" dir="${inferTextDirection(item.next_step)}">${compactText(item.next_step, 42)}</bdi>
-                              <small class="queue-date" dir="ltr">${shortDate(item.next_step_date)}</small>
-                            </button>
-                          `,
-                        )
-                        .join("")
-                    : renderEmptyState()
-                }
-              </div>
-            </article>
-          `;
-        })
-        .join("")}
-    </section>
-  `;
-}
-
-function renderSectorScreen() {
-  const sectors = getFilteredSectors();
-  const selectedSector = sectors[0] || state.data.sectors[0];
-  setScreenActions(`
-    <button class="primary-button" type="button" data-action="new-sector">${copy().chrome.buttons.newSector}</button>
-  `);
-
-  return `
-    <section class="list-detail-layout">
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <p class="panel-label">${copy().chrome.sections.sectorListLabel}</p>
-            <h3>${copy().chrome.sections.sectorListTitle}</h3>
-          </div>
-          <span class="pill">${sectors.length}</span>
-        </div>
-        <div class="stack-list">
+        <div class="rail-list">
           ${
-            sectors.length
-              ? sectors
-                  .map((sector) => {
-                    const computedStatus = getComputedSectorStatus(sector, todayDate());
-                    return `
-                      <button class="record-row" type="button" data-open-record="sector:${sector.id}">
+            opportunities.length
+              ? opportunities
+                  .map(
+                    (opportunity) => `
+                      <button class="rail-item source-opp-row" type="button" data-open-record="opportunity:${opportunity.id}">
                         <div>
-                          <strong>${sector.sector_name}</strong>
-                          <span>${displayPriority(sector.priority)} • ${displayStage(computedStatus)}</span>
+                          <strong>${opportunity.company_name}</strong>
+                          <div class="meta-row">${displayStage(getComputedOpportunityStage(opportunity, todayDate()))}</div>
                         </div>
-                        <small>${getFieldLabel("score", "Score")} ${sector.score}</small>
+                        <span class="pill">${formatCurrency(opportunity.estimated_value)}</span>
                       </button>
-                    `;
-                  })
+                    `,
+                  )
                   .join("")
               : renderEmptyState()
           }
         </div>
       </article>
 
-      <article class="panel detail-panel">
+      <article class="panel rail-panel">
         <div class="panel-head">
           <div>
-            <p class="panel-label">${copy().chrome.sections.sectorDetailLabel}</p>
-            <h3>${selectedSector?.sector_name || getValueLabel("noActiveSector", "No sector selected")}</h3>
+            <p class="panel-label">${copy().meta.lang === "ar" ? "دعم القرار" : "Decision Support"}</p>
+            <h3>${copy().meta.lang === "ar" ? "القطاعات داخل القناة" : "Sectors in Source"}</h3>
           </div>
-          ${
-            selectedSector
-              ? `<button class="ghost-button" type="button" data-set-active="${selectedSector.id}">${copy().chrome.buttons.setActive}</button>`
-              : ""
-          }
         </div>
-        ${
-          selectedSector
-            ? `
-              <div class="detail-grid">
-                <div><span>${getFieldLabel("icp", "ICP")}</span><strong>${selectedSector.icp}</strong></div>
-                <div><span>${getFieldLabel("pain", "Pain")}</span><strong>${selectedSector.pain}</strong></div>
-                <div><span>${getFieldLabel("offerAngle", "Offer angle")}</span><strong>${selectedSector.offer_angle}</strong></div>
-                <div><span>${getFieldLabel("urgencyAngle", "Urgency angle")}</span><strong>${selectedSector.urgency_angle}</strong></div>
-                <div><span>${getFieldLabel("proofNeeded", "Proof needed")}</span><strong>${selectedSector.proof_needed}</strong></div>
-                <div><span>${getFieldLabel("whyThisSector", "Why this sector")}</span><strong>${selectedSector.why_this_sector}</strong></div>
-                <div><span>${getFieldLabel("whyNow", "Why now")}</span><strong>${selectedSector.why_now}</strong></div>
-                <div><span>${getFieldLabel("disqualifyRules", "Disqualify rules")}</span><strong>${selectedSector.disqualify_rules}</strong></div>
-                <div><span>${getFieldLabel("finalDecision", "Final decision")}</span><strong>${displayDecision(selectedSector.final_decision)}</strong></div>
-                <div><span>${getFieldLabel("decisionBox", "Decision box")}</span><strong>${selectedSector.notes || getValueLabel("noAdditionalNote", "No additional note")}</strong></div>
-              </div>
-            `
-            : renderEmptyState()
-        }
+        <div class="rail-list">
+          ${getFilteredSectors()
+            .map(
+              (sector) => `
+                <button class="rail-item source-sector-row" type="button" data-open-record="sector:${sector.id}">
+                  <div>
+                    <strong>${sector.sector_name}</strong>
+                    <div class="meta-row">${displayStage(getComputedSectorStatus(sector, todayDate()))}</div>
+                  </div>
+                  ${sector.is_active ? `<span class="pill">${copy().chrome.buttons.setActive}</span>` : ""}
+                </button>
+              `,
+            )
+            .join("") || renderEmptyState()}
+        </div>
       </article>
-    </section>
+    </aside>
   `;
 }
 
-function renderLeadCard(lead) {
-  const sector = getSectorById(lead.sector_id);
-  const computedStage = getComputedLeadStage(lead, todayDate());
-  const guardFlags = getLeadGuardFlags(lead, todayDate());
-  return `
-    <button class="kanban-card" type="button" data-open-record="lead:${lead.id}">
-      <div class="kanban-top">
-        <div>
-          <strong dir="${inferTextDirection(lead.company_name)}">${lead.company_name}</strong>
-          <span class="mixed-meta" dir="auto">${sector?.sector_name || "—"} • ${displayAgentKey(lead.owner)}</span>
-        </div>
-        <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${displayStage(computedStage)}</span>
-      </div>
-      <div class="meta-list">
-        <span class="mixed-meta" dir="auto">${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}</span>
-        <span dir="auto"><span class="source-badge">${displayChannel(lead.channel)}</span> • ${getFieldLabel("score", "Score")} ${lead.lead_score || 0}</span>
-        <span dir="auto">${displayUrgency(lead.urgency_level || "None")} • ${displayDecisionLevel(lead.decision_level || "Unknown")}</span>
-      </div>
-      ${
-        guardFlags.length
-          ? `<div class="guard-row">${guardFlags
-              .map((flag) => `<span class="guard-pill ${flag.type}">${displayGuardFlag(flag.label)}</span>`)
-              .join("")}</div>`
-          : ""
-      }
-      <p class="card-summary" dir="${inferTextDirection(lead.pain_signal || lead.notes)}">${compactText(lead.pain_signal || lead.notes || getValueLabel("noSignalCaptured", "No signal captured yet."), 78)}</p>
-      <div class="card-footer">
-        <small dir="ltr">${getValueLabel("last", "Last")} ${shortDate(lead.last_contact_date)}</small>
-        <small class="card-next" dir="${inferTextDirection(lead.next_step)}">${compactText(lead.next_step || "—", 40)} <span dir="ltr">${shortDate(lead.next_step_date)}</span></small>
-      </div>
-    </button>
-  `;
-}
-
-function renderPipelineScreen() {
-  const leads = getFilteredLeads();
-  setScreenActions(`
-    <button class="primary-button" type="button" data-action="new-lead">${copy().chrome.buttons.newLead}</button>
-  `);
-
-  return `
-    <section class="kanban-board">
-      ${LEAD_STAGES.map((stage) => {
-        const items = leads.filter((lead) => getComputedLeadStage(lead, todayDate()) === stage);
-        return `
-          <article class="kanban-column">
-            <header class="kanban-header">
-              <div>
-                <p class="panel-label">${getFieldLabel("leadStage", "Lead Stage")}</p>
-                <h3>${displayStage(stage)}</h3>
-              </div>
-              <span class="pill">${items.length}</span>
-            </header>
-            <div class="kanban-stack">
-              ${items.length ? items.map(renderLeadCard).join("") : renderEmptyState()}
-            </div>
-          </article>
-        `;
-      }).join("")}
-    </section>
-  `;
-}
-
-function renderOpportunityCard(opportunity) {
-  const sector = getSectorById(opportunity.sector_id);
-  const computedStage = getComputedOpportunityStage(opportunity, todayDate());
-  const guardFlags = getOpportunityGuardFlags(opportunity, todayDate());
-  return `
-    <button class="kanban-card" type="button" data-open-record="opportunity:${opportunity.id}">
-      <div class="kanban-top">
-        <div>
-          <strong dir="${inferTextDirection(opportunity.company_name)}">${opportunity.company_name}</strong>
-          <span class="mixed-meta" dir="auto">${sector?.sector_name || "—"} • ${displayAgentKey(opportunity.owner)}</span>
-        </div>
-        <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${displayStage(computedStage)}</span>
-      </div>
-      <div class="meta-list">
-        <span dir="ltr">${formatCurrency(opportunity.estimated_value)}</span>
-        <span dir="${inferTextDirection(opportunity.buyer_readiness)}">${compactText(opportunity.buyer_readiness, 44)}</span>
-        <span dir="${inferTextDirection(opportunity.stakeholder_status || getValueLabel("stakeholderPathUnclear", "Stakeholder path not clear"))}">${compactText(opportunity.stakeholder_status || getValueLabel("stakeholderPathUnclear", "Stakeholder path not clear"), 46)}</span>
-      </div>
-      ${
-        guardFlags.length
-          ? `<div class="guard-row">${guardFlags
-              .map((flag) => `<span class="guard-pill ${flag.type}">${displayGuardFlag(flag.label)}</span>`)
-              .join("")}</div>`
-          : ""
-      }
-      <p class="card-summary" dir="${inferTextDirection(opportunity.pain_summary)}">${compactText(opportunity.pain_summary, 78)}</p>
-      <div class="card-footer">
-        <small dir="${inferTextDirection(opportunity.objection_summary)}">${compactText(opportunity.objection_summary || getValueLabel("noObjectionLogged", "No objection logged"), 48)}</small>
-        <small class="card-next" dir="${inferTextDirection(opportunity.next_step)}">${compactText(opportunity.next_step, 40)} <span dir="ltr">${shortDate(opportunity.next_step_date)}</span></small>
-      </div>
-    </button>
-  `;
-}
-
-function renderOpportunityScreen() {
-  const opportunities = getFilteredOpportunities();
-  setScreenActions(`
-    <button class="primary-button" type="button" data-action="new-opportunity">${copy().chrome.buttons.newOpportunity}</button>
-  `);
-
-  return `
-    <section class="kanban-board">
-      ${OPPORTUNITY_STAGES.map((stage) => {
-        const items = opportunities.filter(
-          (opportunity) => getComputedOpportunityStage(opportunity, todayDate()) === stage,
-        );
-        return `
-          <article class="kanban-column">
-            <header class="kanban-header">
-              <div>
-                <p class="panel-label">${getFieldLabel("opportunityStage", "Opportunity Stage")}</p>
-                <h3>${displayStage(stage)}</h3>
-              </div>
-              <span class="pill">${items.length}</span>
-            </header>
-            <div class="kanban-stack">
-              ${items.length ? items.map(renderOpportunityCard).join("") : renderEmptyState()}
-            </div>
-          </article>
-        `;
-      }).join("")}
-    </section>
-  `;
-}
-
-function renderBottleneckScreen() {
-  const metrics = getMetrics(state.data, todayDate());
-  const funnelStages = [
-    ["Targeted", metrics.targeted],
-    ["Contacted", metrics.contacted],
-    ["Qualified", metrics.qualified],
-    ["Discoveries", metrics.discoveries],
-    ["Demos", metrics.demos],
-    ["Proposals", metrics.proposals],
-    ["Wins", metrics.wins],
-  ];
-  const maxValue = Math.max(...funnelStages.map(([, value]) => value), 1);
-  const delayedCounts = [
-    ...state.data.leads.filter((lead) => getComputedLeadStage(lead, todayDate()) === "Delayed"),
-    ...state.data.opportunities.filter(
-      (opportunity) => getComputedOpportunityStage(opportunity, todayDate()) === "Delayed",
-    ),
-  ];
+function renderSourcesScreen() {
+  const sources = ensureActiveSource();
+  const activeSource = getActiveSource();
 
   setScreenActions("");
 
+  if (!sources.length) {
+    return renderEmptyState();
+  }
+
   return `
-    <section class="stat-strip">
-      <article class="stat-card"><span>${getFieldLabel("targeted", "Targeted")}</span><strong>${metrics.targeted}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("contacted", "Contacted")}</span><strong>${metrics.contacted}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("replyRate", "Reply rate")}</span><strong>${Math.round(metrics.replyRate * 100)}%</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("qualified", "Qualified")}</span><strong>${metrics.qualified}</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("meetingConversion", "Meeting conversion")}</span><strong>${Math.round(metrics.meetingConversion * 100)}%</strong></article>
-      <article class="stat-card"><span>${getFieldLabel("pipelineValue", "Pipeline value")}</span><strong>${formatCurrency(metrics.pipelineValue)}</strong></article>
-    </section>
-
-    <section class="bottleneck-layout">
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <p class="panel-label">${copy().chrome.sections.funnelLabel}</p>
-            <h3>${copy().chrome.sections.funnelTitle}</h3>
-          </div>
+    <section class="source-board">
+      ${renderSourceTabs()}
+      <section class="stat-strip source-stat-strip">
+        ${sources
+          .map((source) => {
+            const metrics = getSourceMetrics(source);
+            return `
+              <article class="stat-card ${source === activeSource ? "accent-stat" : ""}">
+                <span>${displayChannel(source)}</span>
+                <strong>${metrics.leads}</strong>
+                <small>${copy().meta.lang === "ar" ? `${metrics.readyForHandoff} جاهزة للتحويل` : `${metrics.readyForHandoff} ready for handoff`}</small>
+              </article>
+            `;
+          })
+          .join("")}
+      </section>
+      <section class="source-layout">
+        <div class="source-main">
+          ${renderExtractionPanel(activeSource)}
+          ${renderSourceWorkflow(activeSource)}
         </div>
-        <div class="funnel-list">
-          ${funnelStages
-            .map(
-              ([label, value]) => `
-                <div class="funnel-row">
-                  <span>${label === "Discoveries" ? getFieldLabel("discoveries", "Discoveries") : displayStage(label)}</span>
-                  <div class="bar-track">
-                    <div class="bar-fill" style="width:${(value / maxValue) * 100}%"></div>
-                  </div>
-                  <strong>${value}</strong>
-                </div>
-              `,
-            )
-            .join("")}
-        </div>
-      </article>
-
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <p class="panel-label">${copy().chrome.sections.breakLabel}</p>
-            <h3>${displayBreakOption(metrics.breakSuggestion)}</h3>
-          </div>
-          <span class="pill">${getValueLabel("delayedCount", (count) => `${count} delayed`)(delayedCounts.length)}</span>
-        </div>
-        <div class="break-grid">
-          ${BREAK_OPTIONS.map(
-            (option) => `
-              <div class="break-option ${option === metrics.breakSuggestion ? "active" : ""}">
-                ${displayBreakOption(option)}
-              </div>
-            `,
-          ).join("")}
-        </div>
-        <div class="detail-grid tight">
-          <div><span>${getFieldLabel("topRepeatedObjection", "Top repeated objection")}</span><strong>${metrics.topObjection}</strong></div>
-          <div><span>${getFieldLabel("mostDelayedStage", "Most delayed stage")}</span><strong>${metrics.mostDelayedStage === "No delayed stage" ? getValueLabel("noDelayedStage", "No delayed stage") : displayStage(metrics.mostDelayedStage)}</strong></div>
-          <div><span>${getFieldLabel("proposals", "Proposals")}</span><strong>${metrics.proposals}</strong></div>
-          <div><span>${getFieldLabel("wins", "Wins")}</span><strong>${metrics.wins}</strong></div>
-        </div>
-      </article>
+        ${renderSourceProgression(activeSource)}
+      </section>
     </section>
   `;
 }
@@ -1695,7 +1287,6 @@ function renderSectorDrawer(sector) {
     <section class="drawer-section">
       <h4>${getFieldLabel("quickEdit", "Quick Edit")}</h4>
       <form data-save-form="sector" data-entity-id="${sector.id}">
-        <label><span>${getFieldLabel("owner", "Owner")}</span><input name="owner" value="${sector.owner || ""}" /></label>
         <label><span>${getFieldLabel("nextStep", "Next Step")}</span><input name="next_step" value="${sector.next_step || ""}" /></label>
         <label><span>${getFieldLabel("nextStepDate", "Next Step Date")}</span><input type="date" name="next_step_date" value="${sector.next_step_date || ""}" /></label>
         <label><span>${getFieldLabel("urgencyAngle", "Urgency angle")}</span><textarea name="urgency_angle">${sector.urgency_angle || ""}</textarea></label>
@@ -1734,7 +1325,6 @@ function renderLeadDrawer(lead) {
       ${fieldRow(getFieldLabel("sector", "Sector"), sector?.sector_name)}
       ${fieldRow(getFieldLabel("contact", "Contact"), `${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}`)}
       ${fieldRow(getFieldLabel("channel", "Channel"), displayChannel(lead.channel))}
-      ${fieldRow(getFieldLabel("owner", "Owner"), displayAgentKey(lead.owner))}
       ${fieldRow(getFieldLabel("score", "Score"), lead.lead_score)}
       ${fieldRow(getFieldLabel("painSignal", "Pain Signal"), lead.pain_signal)}
       ${fieldRow(getFieldLabel("interestType", "Interest Type"), displayInterestType(lead.interest_type))}
@@ -1779,17 +1369,6 @@ function renderLeadDrawer(lead) {
               .map(
                 (stage) =>
                   `<option value="${stage}" ${stage === lead.current_stage ? "selected" : ""}>${displayStage(stage)}</option>`,
-              )
-              .join("")}
-          </select>
-        </label>
-        <label>
-          <span>${getFieldLabel("owner", "Owner")}</span>
-          <select name="owner">
-            ${AGENTS.filter((agent) => agent.entity === "lead")
-              .map(
-                (agent) =>
-                  `<option value="${agent.key}" ${agent.key === lead.owner ? "selected" : ""}>${displayAgentKey(agent.key)}</option>`,
               )
               .join("")}
           </select>
@@ -1877,17 +1456,6 @@ function renderOpportunityDrawer(opportunity) {
               .join("")}
           </select>
         </label>
-        <label>
-          <span>${getFieldLabel("owner", "Owner")}</span>
-          <select name="owner">
-            ${AGENTS.filter((agent) => agent.entity === "opportunity")
-              .map(
-                (agent) =>
-                  `<option value="${agent.key}" ${agent.key === opportunity.owner ? "selected" : ""}>${displayAgentKey(agent.key)}</option>`,
-              )
-              .join("")}
-          </select>
-        </label>
         <label><span>${getFieldLabel("nextStep", "Next Step")}</span><input name="next_step" value="${opportunity.next_step || ""}" /></label>
         <label><span>${getFieldLabel("nextStepDate", "Next Step Date")}</span><input type="date" name="next_step_date" value="${opportunity.next_step_date || ""}" /></label>
         <label><span>${getFieldLabel("estimatedValue", "Estimated Value")}</span><input type="number" min="0" step="1" name="estimated_value" value="${opportunity.estimated_value || 0}" /></label>
@@ -1921,7 +1489,6 @@ function renderCreateForm(entityType) {
           <label><span>${getFormLabel("offerAngle", "offer_angle")}</span><textarea name="offer_angle" required></textarea></label>
           <label><span>${getFormLabel("proofNeeded", "proof_needed")}</span><textarea name="proof_needed" required></textarea></label>
           <label><span>${getFormLabel("finalDecision", "final_decision")}</span><select name="final_decision"><option value="Go">${displayDecision("Go")}</option><option value="Test">${displayDecision("Test")}</option><option value="Pause">${displayDecision("Pause")}</option><option value="Reject">${displayDecision("Reject")}</option></select></label>
-          <label><span>${getFormLabel("owner", "owner")}</span><select name="owner"><option value="Agent 1">${displayAgentKey("Agent 1")}</option></select></label>
           <label><span>${getFormLabel("nextStep", "next_step")}</span><input name="next_step" /></label>
           <label><span>${getFormLabel("nextStepDate", "next_step_date")}</span><input type="date" name="next_step_date" /></label>
           <div class="form-actions">
@@ -1934,6 +1501,7 @@ function renderCreateForm(entityType) {
 
   if (entityType === "lead") {
     const activeSectors = state.data.sectors.filter((sector) => sector.is_active);
+    const activeSource = state.drawer.contextSource || getActiveSource();
     return `
       <section class="drawer-section">
         <h4>${copy().chrome.forms.createLead}</h4>
@@ -1943,9 +1511,8 @@ function renderCreateForm(entityType) {
           <label><span>${getFormLabel("contactName", "contact_name")}</span><input name="contact_name" required /></label>
           <label><span>${getFormLabel("role", "role")}</span><input name="role" /></label>
           <label><span>${getFieldLabel("channel", "Channel")}</span><select name="channel">${getChannelOptions()
-            .map((channel) => `<option value="${channel}">${displayChannel(channel)}</option>`)
+            .map((channel) => `<option value="${channel}" ${channel === activeSource ? "selected" : ""}>${displayChannel(channel)}</option>`)
             .join("")}</select></label>
-          <label><span>${getFormLabel("owner", "owner")}</span><select name="owner"><option value="Agent 2">${displayAgentKey("Agent 2")}</option></select></label>
           <label><span>${getFormLabel("currentStage", "current_stage")}</span><select name="current_stage">${LEAD_STAGES.filter((stage) => stage !== "Delayed").map((stage) => `<option value="${stage}">${displayStage(stage)}</option>`).join("")}</select></label>
           <label><span>${getFormLabel("painSignal", "pain_signal")}</span><textarea name="pain_signal"></textarea></label>
           <label><span>${getFormLabel("nextStep", "next_step")}</span><input name="next_step" required /></label>
@@ -1960,17 +1527,19 @@ function renderCreateForm(entityType) {
   }
 
   const eligibleLeads = state.data.leads.filter(
-    (lead) => lead.current_stage === "Handoff Sent" && lead.handoff_summary,
+    (lead) =>
+      lead.current_stage === "Handoff Sent" &&
+      lead.handoff_summary &&
+      !hasOpportunityForLead(state.data.opportunities, lead.id),
   );
 
   return `
-    <section class="drawer-section">
-      <h4>${copy().chrome.forms.createOpportunity}</h4>
-      <form data-create-form="opportunity">
+      <section class="drawer-section">
+        <h4>${copy().chrome.forms.createOpportunity}</h4>
+        <form data-create-form="opportunity">
         <label><span>${getFormLabel("originLeadId", "origin_lead_id")}</span><select name="origin_lead_id">${eligibleLeads.map((lead) => `<option value="${lead.id}">${lead.company_name}</option>`).join("")}</select></label>
         <label><span>${getFormLabel("companyName", "company_name")}</span><input name="company_name" required /></label>
         <label><span>${getFormLabel("sectorId", "sector_id")}</span><select name="sector_id">${state.data.sectors.map((sector) => `<option value="${sector.id}">${sector.sector_name}</option>`).join("")}</select></label>
-        <label><span>${getFormLabel("owner", "owner")}</span><select name="owner"><option value="Agent 3">${displayAgentKey("Agent 3")}</option></select></label>
         <label><span>${getFormLabel("currentStage", "current_stage")}</span><select name="current_stage">${OPPORTUNITY_STAGES.filter((stage) => !["Delayed", "Won", "Lost"].includes(stage)).map((stage) => `<option value="${stage}">${displayStage(stage)}</option>`).join("")}</select></label>
         <label><span>${getFormLabel("buyerReadiness", "buyer_readiness")}</span><textarea name="buyer_readiness" required></textarea></label>
         <label><span>${getFormLabel("painSummary", "pain_summary")}</span><textarea name="pain_summary" required></textarea></label>
@@ -2064,7 +1633,7 @@ async function saveSectorForm(form) {
   const entityId = form.dataset.entityId;
   const patch = readFormValues(form);
   patch.notes = patch.notes || "";
-  patch.owner = patch.owner || "Agent 1";
+  patch.owner = "Admin";
   patch.next_step = patch.next_step || "";
   patch.next_step_date = patch.next_step_date || "";
   patch.status = state.data.sectors.find((sector) => sector.id === entityId)?.status;
@@ -2093,6 +1662,7 @@ async function saveLeadForm(form) {
   const entityId = form.dataset.entityId;
   const existing = state.data.leads.find((lead) => lead.id === entityId);
   const patch = { ...existing, ...readFormValues(form) };
+  patch.owner = "Admin";
   patch.lead_score = existing.lead_score;
   patch.urgency_level = existing.urgency_level;
   patch.decision_level = existing.decision_level;
@@ -2120,6 +1690,7 @@ async function saveOpportunityForm(form) {
   const entityId = form.dataset.entityId;
   const existing = state.data.opportunities.find((opportunity) => opportunity.id === entityId);
   const patch = { ...existing, ...readFormValues(form) };
+  patch.owner = "Admin";
   patch.estimated_value = Number(patch.estimated_value || 0);
   patch.stakeholder_map = patch.stakeholder_map || "";
   patch.close_probability = Math.max(0, Math.min(100, Number(patch.close_probability || 0)));
@@ -2156,7 +1727,7 @@ async function createEntity(entityType, form) {
       offer_angle: values.offer_angle,
       proof_needed: values.proof_needed,
       final_decision: values.final_decision,
-      owner: values.owner,
+      owner: "Admin",
       next_step: values.next_step,
       next_step_date: values.next_step_date,
       urgency_angle: "",
@@ -2184,7 +1755,7 @@ async function createEntity(entityType, form) {
   if (entityType === "lead") {
     const sector = state.data.sectors.find((item) => item.id === values.sector_id);
     if (!sector?.is_active) {
-      setDrawer({ message: localizeMessage("Agent 2 can only create new leads for the active sector.") });
+      setDrawer({ message: localizeMessage("New leads can only be created for the active sector.") });
       return;
     }
     const draft = {
@@ -2194,7 +1765,7 @@ async function createEntity(entityType, form) {
       contact_name: values.contact_name,
       role: values.role,
       channel: values.channel,
-      owner: values.owner,
+      owner: "Admin",
       current_stage: values.current_stage,
       next_step: values.next_step,
       next_step_date: values.next_step_date,
@@ -2246,7 +1817,7 @@ async function createEntity(entityType, form) {
       origin_lead_id: values.origin_lead_id,
       company_name: values.company_name,
       sector_id: values.sector_id,
-      owner: values.owner,
+      owner: "Admin",
       current_stage: values.current_stage,
       buyer_readiness: values.buyer_readiness,
       pain_summary: values.pain_summary,
@@ -2368,11 +1939,22 @@ function bindDrawerActions() {
 }
 
 function bindRecordOpeners() {
+  elements.content.querySelectorAll("[data-source-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeSource = button.dataset.sourceTab;
+      renderApp();
+    });
+  });
+
   elements.content.querySelectorAll("[data-open-record]").forEach((button) => {
     button.addEventListener("click", () => {
       const [entityType, entityId] = button.dataset.openRecord.split(":");
       setDrawer({ open: true, kind: "detail", entityType, entityId, mode: "view", message: "" });
     });
+  });
+
+  elements.content.querySelectorAll("[data-convert-lead]").forEach((button) => {
+    button.addEventListener("click", () => convertLeadToOpportunity(button.dataset.convertLead));
   });
 
   elements.content.querySelectorAll("[data-set-active]").forEach((button) => {
@@ -2392,20 +1974,8 @@ function renderScreen() {
   elements.screenTitle.textContent = title;
 
   let screenHtml = "";
-  if (state.activeScreen === "executive") {
-    screenHtml = renderExecutiveScreen();
-  }
-  if (state.activeScreen === "sectors") {
-    screenHtml = renderSectorScreen();
-  }
-  if (state.activeScreen === "pipeline") {
-    screenHtml = renderPipelineScreen();
-  }
-  if (state.activeScreen === "opportunities") {
-    screenHtml = renderOpportunityScreen();
-  }
-  if (state.activeScreen === "bottleneck") {
-    screenHtml = renderBottleneckScreen();
+  if (state.activeScreen === "sources") {
+    screenHtml = renderSourcesScreen();
   }
 
   elements.content.innerHTML = `${renderNotice()}${screenHtml}`;

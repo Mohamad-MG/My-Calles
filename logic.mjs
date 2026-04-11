@@ -36,10 +36,13 @@ const BREAK_OPTIONS = [
   "No-decision drift",
 ];
 
-const AGENTS = [
-  { key: "Agent 1", label: "Strategy Brain", entity: "sector" },
-  { key: "Agent 2", label: "Pipeline Builder", entity: "lead" },
-  { key: "Agent 3", label: "Revenue Mover", entity: "opportunity" },
+const SOURCE_WORKFLOW_BUCKETS = [
+  "New",
+  "Needs Extraction",
+  "Needs Reply",
+  "Needs Qualification",
+  "Ready for Handoff",
+  "Closed / Disqualified",
 ];
 
 const STORAGE_KEY = "mycalls-operational-dashboard.v1";
@@ -196,6 +199,40 @@ function stageAtOrAfter(stages, current, minimum) {
 
 function hasOpportunityForLead(opportunities, leadId) {
   return opportunities.some((opportunity) => opportunity.origin_lead_id === leadId);
+}
+
+function getLeadWorkflowBucket(lead, opportunities = [], today = todayDate()) {
+  if (!lead) {
+    return "New";
+  }
+
+  if (hasOpportunityForLead(opportunities, lead.id)) {
+    return "Progressed";
+  }
+
+  const computedStage = getComputedLeadStage(lead, today);
+
+  if (["Disqualified", "No Response"].includes(computedStage)) {
+    return "Closed / Disqualified";
+  }
+
+  if (computedStage === "Handoff Sent" && lead.handoff_summary) {
+    return "Ready for Handoff";
+  }
+
+  if (["Qualified", "Meeting Booked"].includes(computedStage)) {
+    return "Needs Qualification";
+  }
+
+  if (["Contacted", "Replied", "Delayed"].includes(computedStage)) {
+    return "Needs Reply";
+  }
+
+  if (["New", "Targeted"].includes(computedStage)) {
+    return lead.current_stage === "New" ? "New" : "Needs Extraction";
+  }
+
+  return "Needs Extraction";
 }
 
 function isLeadClosed(stage) {
@@ -596,40 +633,6 @@ function getMetrics(state, today = todayDate()) {
     computedLeadStages,
     computedOpportunityStages,
   };
-}
-
-function getAgentSummaries(state, today = todayDate()) {
-  const queue = getTodayQueue(state, today);
-  const metrics = getMetrics(state, today);
-
-  return AGENTS.map((agent) => {
-    const overdue = queue.filter((item) => item.owner === agent.key && item.bucket === "Overdue").length;
-    const openItems =
-      agent.entity === "sector"
-        ? state.sectors.filter((sector) => !isSectorClosed(sector.status)).length
-        : agent.entity === "lead"
-          ? state.leads.filter((lead) => !isLeadClosed(lead.current_stage)).length
-          : state.opportunities.filter(
-              (opportunity) => !isOpportunityClosed(opportunity.current_stage),
-            ).length;
-
-    const agentQueue = queue.filter((item) => item.owner === agent.key);
-    const nextAction = agentQueue[0]?.next_step || "No immediate next step";
-    const currentMission =
-      agent.entity === "sector"
-        ? state.weeklyFocus.current_offer
-        : agent.entity === "lead"
-          ? `${metrics.targeted} targeted / ${metrics.qualified} qualified`
-          : `${metrics.discoveries} discoveries / ${metrics.pipelineValue} SAR pipeline`;
-
-    return {
-      ...agent,
-      overdue,
-      openItems,
-      nextAction,
-      currentMission,
-    };
-  });
 }
 
 function enforceSingleActiveSector(state, sectorId) {
@@ -1036,13 +1039,13 @@ function createSeedData() {
 }
 
 export {
-  AGENTS,
   BREAK_OPTIONS,
   LEAD_REQUIRED_FIELDS,
   LEAD_STAGES,
   OPPORTUNITY_REQUIRED_FIELDS,
   OPPORTUNITY_STAGES,
   SECTOR_REQUIRED_FIELDS,
+  SOURCE_WORKFLOW_BUCKETS,
   STORAGE_KEY,
   STORAGE_VERSION,
   addDays,
@@ -1050,7 +1053,6 @@ export {
   createSeedData,
   deepClone,
   enforceSingleActiveSector,
-  getAgentSummaries,
   getComputedLeadStage,
   getLeadGuardFlags,
   getOpportunityGuardFlags,
@@ -1060,6 +1062,7 @@ export {
   getMetrics,
   getRequiredValidationErrors,
   getTodayQueue,
+  getLeadWorkflowBucket,
   hasOpportunityForLead,
   hydrateDashboardState,
   normalizeDashboardState,

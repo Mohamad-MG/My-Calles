@@ -19,11 +19,7 @@ const arLocale = {
   },
   chrome: {
     screens: {
-      executive: "التركيز التنفيذي",
-      sectors: "لوحة القطاعات والعروض",
-      pipeline: "لوحة مسار التأهيل",
-      opportunities: "لوحة الفرص",
-      bottleneck: "لوحة الأداء والاختناق",
+      sources: "لوحة تشغيل المصادر",
     },
     sidebar: {
       weeklyFocusLabel: "التركيز الأسبوعي",
@@ -31,13 +27,11 @@ const arLocale = {
       rules: [
         "الرد ليس فرصة.",
         "لا يوجد عرض بدون جاهزية.",
-        "كل سجل له مالك وخطوة تالية.",
+        "كل سجل يحتاج خطوة تالية واضحة.",
       ],
     },
     filters: {
       sector: "القطاع",
-      source: "المصدر",
-      owner: "المالك",
       stage: "المرحلة / الحالة",
       urgency: "الأولوية",
       overdue: "المتأخر",
@@ -72,10 +66,10 @@ const arLocale = {
       copy: "عدّل الفلاتر أو أضف سجلًا جديدًا.",
     },
     sections: {
-      agentStatusLabel: "حالة الوكلاء",
-      agentStatusTitle: "المشهد التشغيلي اليومي",
-      todayQueueLabel: "قائمة اليوم",
-      todayQueueTitle: "ما الذي يجب تحريكه اليوم",
+      agentStatusLabel: "سير المصدر",
+      agentStatusTitle: "ما الذي يحتاجه هذا المصدر الآن",
+      todayQueueLabel: "صندوق المصدر",
+      todayQueueTitle: "ما الذي يجب تحريكه داخل هذا المصدر",
       sourceMixLabel: "مصادر اللِيدز",
       sourceMixTitle: "من أين تأتي الإشارات القابلة للحركة",
       focusSectorsLabel: "القطاعات الأساسية",
@@ -256,16 +250,6 @@ const arLocale = {
       "Proposal timing": "توقيت العرض",
       "No-decision drift": "تعطّل القرار",
     },
-    agents: {
-      "Agent 1": "الوكيل 1",
-      "Agent 2": "الوكيل 2",
-      "Agent 3": "الوكيل 3",
-    },
-    agentLabels: {
-      "Agent 1": "عقل الاستراتيجية",
-      "Agent 2": "باني المسار",
-      "Agent 3": "محرك الإيراد",
-    },
     guardFlags: {
       Overdue: "متأخر",
       "Handoff missing": "التسليم ناقص",
@@ -314,11 +298,6 @@ const arLocale = {
       TikTok: "تيك توك",
       YouTube: "يوتيوب",
     },
-    queueBuckets: {
-      Overdue: "متأخر",
-      "Due Today": "اليوم",
-      Upcoming: "قادم",
-    },
   },
   messages: {
     notices: {
@@ -326,7 +305,7 @@ const arLocale = {
       seedRestored: "تم استرجاع البيانات التجريبية داخل الحالة المشتركة.",
       localCleared: "تمت إعادة ضبط الحالة المشتركة إلى نسخة بداية جديدة.",
       serverUnavailable: "الخادم المشترك غير متاح حاليًا. يتم عرض بيانات بداية مؤقتة.",
-      activeSectorUpdated: "تم تحديث القطاع النشط. يجب أن يعمل الوكيل 2 على هذا القطاع فقط.",
+      activeSectorUpdated: "تم تحديث القطاع النشط. يجب أن يظل إدخال الجهات الجديدة مركزًا عليه.",
       sectorUpdated: "تم تحديث القطاع بنجاح.",
       leadUpdated: "تم تحديث الجهة بنجاح.",
       opportunityUpdated: "تم تحديث الفرصة بنجاح.",
@@ -374,8 +353,8 @@ const arLocale = {
         "يجب تحديد جاهزية المشتري قبل مرحلة العرض.",
       "Stakeholder status is required before Proposal Stage.":
         "يجب تحديد حالة أصحاب القرار قبل مرحلة العرض.",
-      "Agent 2 can only create new leads for the active sector.":
-        "يمكن للوكيل 2 إنشاء جهات جديدة للقطاع النشط فقط.",
+      "New leads can only be created for the active sector.":
+        "يمكن إنشاء جهات جديدة للقطاع النشط فقط.",
       "Opportunity can only be created from a Handoff Sent lead.":
         "لا يمكن إنشاء فرصة إلا من جهة وصلت إلى مرحلة تم التسليم.",
       "Lead must be Handoff Sent with a handoff summary first.":

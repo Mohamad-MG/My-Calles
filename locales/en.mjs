@@ -18,11 +18,7 @@ const enLocale = {
   },
   chrome: {
     screens: {
-      executive: "Executive Focus",
-      sectors: "Sector & Offer Board",
-      pipeline: "Pipeline Board",
-      opportunities: "Opportunity Board",
-      bottleneck: "Bottleneck & Performance",
+      sources: "Source Operations Board",
     },
     sidebar: {
       weeklyFocusLabel: "Weekly Focus",
@@ -30,13 +26,11 @@ const enLocale = {
       rules: [
         "A reply is not an opportunity.",
         "No proposal without readiness.",
-        "Every record needs an owner and next step.",
+        "Every record needs a concrete next step.",
       ],
     },
     filters: {
       sector: "Sector",
-      source: "Source",
-      owner: "Owner",
       stage: "Stage / Status",
       urgency: "Urgency",
       overdue: "Overdue",
@@ -71,10 +65,10 @@ const enLocale = {
       copy: "Adjust filters or add a new record.",
     },
     sections: {
-      agentStatusLabel: "Agent Status",
-      agentStatusTitle: "Daily agent operating view",
-      todayQueueLabel: "Today Queue",
-      todayQueueTitle: "What must move today",
+      agentStatusLabel: "Source Workflow",
+      agentStatusTitle: "What this source needs next",
+      todayQueueLabel: "Source Inbox",
+      todayQueueTitle: "What must move inside this source",
       sourceMixLabel: "Lead Sources",
       sourceMixTitle: "Where usable leads are coming from",
       focusSectorsLabel: "Priority Sectors",
@@ -255,16 +249,6 @@ const enLocale = {
       "Proposal timing": "Proposal timing",
       "No-decision drift": "No-decision drift",
     },
-    agents: {
-      "Agent 1": "Agent 1",
-      "Agent 2": "Agent 2",
-      "Agent 3": "Agent 3",
-    },
-    agentLabels: {
-      "Agent 1": "Strategy Brain",
-      "Agent 2": "Pipeline Builder",
-      "Agent 3": "Revenue Mover",
-    },
     guardFlags: {
       Overdue: "Overdue",
       "Handoff missing": "Handoff missing",
@@ -313,11 +297,6 @@ const enLocale = {
       TikTok: "TikTok",
       YouTube: "YouTube",
     },
-    queueBuckets: {
-      Overdue: "Overdue",
-      "Due Today": "Due Today",
-      Upcoming: "Upcoming",
-    },
   },
   messages: {
     notices: {
@@ -325,7 +304,7 @@ const enLocale = {
       seedRestored: "Seed data restored to shared state.",
       localCleared: "Shared state reset to a fresh seed snapshot.",
       serverUnavailable: "Shared backend is unavailable. Showing temporary local seed data.",
-      activeSectorUpdated: "Active sector updated. Agent 2 should only work this sector now.",
+      activeSectorUpdated: "Active sector updated. New lead capture should stay focused there.",
       sectorUpdated: "Sector updated successfully.",
       leadUpdated: "Lead updated successfully.",
       opportunityUpdated: "Opportunity updated successfully.",
@@ -373,8 +352,8 @@ const enLocale = {
         "Buyer readiness is required before Proposal Stage.",
       "Stakeholder status is required before Proposal Stage.":
         "Stakeholder status is required before Proposal Stage.",
-      "Agent 2 can only create new leads for the active sector.":
-        "Agent 2 can only create new leads for the active sector.",
+      "New leads can only be created for the active sector.":
+        "New leads can only be created for the active sector.",
       "Opportunity can only be created from a Handoff Sent lead.":
         "Opportunity can only be created from a Handoff Sent lead.",
       "Lead must be Handoff Sent with a handoff summary first.":

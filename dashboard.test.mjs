@@ -13,7 +13,9 @@ import {
   normalizeDashboardState,
   parseDashboardState,
   getRequiredValidationErrors,
+  getLeadWorkflowBucket,
   serializeDashboardState,
+  SOURCE_WORKFLOW_BUCKETS,
   getTodayQueue,
   hasOpportunityForLead,
   validateLeadTransition,
@@ -223,4 +225,39 @@ test("locale seed factories preserve shared domain parity", () => {
   assert.equal(enSeed.leads.length, arSeed.leads.length);
   assert.equal(enSeed.opportunities.length, arSeed.opportunities.length);
   assert.equal(enSeed.weeklyFocus.active_sector_id, arSeed.weeklyFocus.active_sector_id);
+});
+
+test("source workflow buckets stay canonical and ordered", () => {
+  assert.deepEqual(SOURCE_WORKFLOW_BUCKETS, [
+    "New",
+    "Needs Extraction",
+    "Needs Reply",
+    "Needs Qualification",
+    "Ready for Handoff",
+    "Closed / Disqualified",
+  ]);
+});
+
+test("lead workflow bucket mapping follows source-first display rules", () => {
+  const seed = createSeedData();
+
+  const newLead = { ...seed.leads[0], id: "lead-new", current_stage: "New" };
+  const targetedLead = { ...seed.leads[0], id: "lead-targeted", current_stage: "Targeted" };
+  const repliedLead = { ...seed.leads[0], id: "lead-replied", current_stage: "Replied" };
+  const qualifiedLead = { ...seed.leads[0], id: "lead-qualified", current_stage: "Qualified" };
+  const handoffLead = {
+    ...seed.leads.find((lead) => lead.id === "lead-2"),
+    id: "lead-handoff-ready",
+    next_step_date: "",
+  };
+  const closedLead = seed.leads.find((lead) => lead.id === "lead-5");
+  const progressedLead = seed.leads.find((lead) => lead.id === "lead-4");
+
+  assert.equal(getLeadWorkflowBucket(newLead, seed.opportunities), "New");
+  assert.equal(getLeadWorkflowBucket(targetedLead, seed.opportunities), "Needs Extraction");
+  assert.equal(getLeadWorkflowBucket(repliedLead, seed.opportunities), "Needs Reply");
+  assert.equal(getLeadWorkflowBucket(qualifiedLead, seed.opportunities), "Needs Qualification");
+  assert.equal(getLeadWorkflowBucket(handoffLead, seed.opportunities), "Ready for Handoff");
+  assert.equal(getLeadWorkflowBucket(closedLead, seed.opportunities), "Closed / Disqualified");
+  assert.equal(getLeadWorkflowBucket(progressedLead, seed.opportunities), "Progressed");
 });

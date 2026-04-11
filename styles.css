@@ -1130,6 +1130,122 @@ html[dir="rtl"] .drawer {
   margin-top: 12px;
 }
 
+.filters {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.source-board,
+.source-main,
+.source-progression,
+.source-workflow {
+  display: grid;
+  gap: 12px;
+}
+
+.source-tabs {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.source-tab {
+  min-width: 190px;
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 12px 14px;
+  text-align: start;
+  display: grid;
+  gap: 4px;
+  box-shadow: var(--shadow);
+}
+
+.source-tab span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.source-tab.active {
+  border-color: rgba(15, 94, 93, 0.24);
+  background: linear-gradient(160deg, rgba(15, 94, 93, 0.12), rgba(255, 255, 255, 0.96));
+}
+
+.source-stat-strip {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.source-stat-strip .stat-card {
+  min-height: auto;
+}
+
+.source-stat-strip .stat-card small {
+  color: var(--muted);
+}
+
+.source-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.extraction-panel {
+  gap: 12px;
+}
+
+.source-workflow {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workflow-column {
+  min-height: 300px;
+}
+
+.source-progression {
+  align-content: start;
+}
+
+.source-card {
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: var(--panel-soft);
+  overflow: hidden;
+}
+
+.source-card-main,
+.source-opp-row,
+.source-sector-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.source-card-main:hover,
+.source-opp-row:hover,
+.source-sector-row:hover,
+.source-tab:hover {
+  border-color: var(--stroke-strong);
+  background: var(--panel-strong);
+}
+
+.source-card-actions {
+  padding: 0 12px 12px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.action-rail-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 @media (max-width: 1260px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1155,6 +1271,11 @@ html[dir="rtl"] .drawer {
   }
 
   .gateway-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .source-layout,
+  .source-workflow {
     grid-template-columns: 1fr;
   }
 }
