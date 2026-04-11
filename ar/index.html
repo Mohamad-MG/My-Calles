@@ -12,10 +12,10 @@
         locale: "ar",
         fallbackTitle: "تعذر تشغيل لوحة ماي كولز",
         fallbackMessage:
-          "هذه اللوحة لا تعمل عند فتح الملف مباشرة. افتحها من صفحات جيت هب أو من رابط محلي.",
-        fallbackPrefix: "فشل تشغيل اللوحة. شغّلها من صفحات جيت هب أو من رابط محلي.",
-        localServerCommand: "",
-        localServerHint: "افتح اللوحة من صفحات جيت هب أو من رابط محلي.",
+          "هذه اللوحة يجب أن تعمل عبر خادم ماي كولز المشترك، وليس عند فتح الملف مباشرة.",
+        fallbackPrefix: "فشل تشغيل اللوحة. شغّلها عبر خادم ماي كولز المشترك.",
+        localServerCommand: "npm start",
+        localServerHint: "ثم افتح http://localhost:4173/ar/",
       };
       document.documentElement.classList.add("app-pending");
     </script>
@@ -26,11 +26,11 @@
         <p class="eyebrow">فحص التشغيل</p>
         <h1 id="fallback-title">تعذر تشغيل لوحة ماي كولز</h1>
         <p id="fallback-message">
-          هذه اللوحة لا تعمل عند فتح الملف مباشرة. افتحها من صفحات جيت هب أو من رابط محلي.
+          هذه اللوحة يجب أن تعمل عبر خادم ماي كولز المشترك، وليس عند فتح الملف مباشرة.
         </p>
         <div class="fallback-actions">
-          <code id="fallback-command" class="hidden"></code>
-          <span id="fallback-hint">افتح اللوحة من صفحات جيت هب أو من رابط محلي.</span>
+          <code id="fallback-command">npm start</code>
+          <span id="fallback-hint">ثم افتح http://localhost:4173/ar/</span>
         </div>
       </div>
     </div>
@@ -118,14 +118,13 @@
 
         try {
           window.__MYCALLS_BOOT__.started = true;
-          const [{ getLocaleConfig, getStorageKey }, app] = await Promise.all([
+          const [{ getLocaleConfig }, app] = await Promise.all([
             import("../i18n.mjs"),
             import("../app.js"),
           ]);
-          app.bootstrapApp({
+          await app.bootstrapApp({
             locale: page.locale,
             localeConfig: getLocaleConfig(page.locale),
-            storageKey: getStorageKey(page.locale),
           });
           window.__MYCALLS_BOOT__.ready = true;
           document.documentElement.classList.remove("app-pending");

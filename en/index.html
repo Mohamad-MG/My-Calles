@@ -12,9 +12,9 @@
         locale: "en",
         fallbackTitle: "MyCalls Dashboard could not start",
         fallbackMessage:
-          "This dashboard is not supported over file://. Open it through GitHub Pages or a local HTTP server such as http://localhost:4173/en/.",
-        fallbackPrefix: "Dashboard boot failed. Run it on GitHub Pages or http://localhost.",
-        localServerCommand: "python -m http.server 4173",
+          "This dashboard must run through the shared MyCalls server, not file://. Open it through the Node server at http://localhost:4173/en/.",
+        fallbackPrefix: "Dashboard boot failed. Run it through the shared MyCalls server.",
+        localServerCommand: "npm start",
         localServerHint: "Then open http://localhost:4173/en/",
       };
       document.documentElement.classList.add("app-pending");
@@ -26,10 +26,10 @@
         <p class="eyebrow">Runtime Check</p>
         <h1 id="fallback-title">MyCalls Dashboard could not start</h1>
         <p id="fallback-message">
-          This dashboard must run over http://localhost or GitHub Pages, not file://.
+          This dashboard must run through the shared MyCalls server, not file://.
         </p>
         <div class="fallback-actions">
-          <code id="fallback-command">python -m http.server 4173</code>
+          <code id="fallback-command">npm start</code>
           <span id="fallback-hint">Then open http://localhost:4173/en/</span>
         </div>
       </div>
@@ -118,14 +118,13 @@
 
         try {
           window.__MYCALLS_BOOT__.started = true;
-          const [{ getLocaleConfig, getStorageKey }, app] = await Promise.all([
+          const [{ getLocaleConfig }, app] = await Promise.all([
             import("../i18n.mjs"),
             import("../app.js"),
           ]);
-          app.bootstrapApp({
+          await app.bootstrapApp({
             locale: page.locale,
             localeConfig: getLocaleConfig(page.locale),
-            storageKey: getStorageKey(page.locale),
           });
           window.__MYCALLS_BOOT__.ready = true;
           document.documentElement.classList.remove("app-pending");

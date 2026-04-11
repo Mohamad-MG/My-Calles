@@ -1,0 +1,9 @@
+{
+  "name": "mycalls-operational-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test dashboard.test.mjs server.test.mjs"
+  }
+}

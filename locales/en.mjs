@@ -45,14 +45,14 @@ const enLocale = {
       no: "No",
     },
     storage: {
-      savedLocally: (time) => `Saved locally ${time}`,
-      localLoaded: "Local state loaded",
-      seedMode: "Seed mode",
-      memoryOnly: "Memory only",
+      savedLocally: (time) => `Shared state synced ${time}`,
+      localLoaded: "Shared state loaded",
+      seedMode: "Seed restored",
+      memoryOnly: "Server unavailable",
     },
     buttons: {
       restoreSeed: "Restore Seed",
-      resetLocal: "Reset Local",
+      resetLocal: "Reset Shared State",
       newSector: "New Sector",
       newLead: "New Lead",
       newOpportunity: "New Opportunity",
@@ -322,8 +322,9 @@ const enLocale = {
   messages: {
     notices: {
       recoveredSeed: "Saved state was invalid, so the dashboard recovered to a safe seed state.",
-      seedRestored: "Seed data restored and saved locally.",
-      localCleared: "Local saved state cleared. Dashboard returned to fresh seed mode.",
+      seedRestored: "Seed data restored to shared state.",
+      localCleared: "Shared state reset to a fresh seed snapshot.",
+      serverUnavailable: "Shared backend is unavailable. Showing temporary local seed data.",
       activeSectorUpdated: "Active sector updated. Agent 2 should only work this sector now.",
       sectorUpdated: "Sector updated successfully.",
       leadUpdated: "Lead updated successfully.",
@@ -378,6 +379,8 @@ const enLocale = {
         "Opportunity can only be created from a Handoff Sent lead.",
       "Lead must be Handoff Sent with a handoff summary first.":
         "Lead must be Handoff Sent with a handoff summary first.",
+      "An opportunity already exists for this lead.":
+        "An opportunity already exists for this lead.",
     },
   },
   seed: {

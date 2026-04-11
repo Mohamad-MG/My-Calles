@@ -870,6 +870,35 @@ html[dir="rtl"] .drawer {
   border-radius: 14px;
 }
 
+.guidance-banner,
+.progression-card {
+  display: grid;
+  gap: 10px;
+}
+
+.guidance-banner p,
+.progression-card p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.guidance-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ghost-button.tight {
+  padding: 8px 12px;
+}
+
+.progression-card {
+  border: 1px dashed rgba(15, 94, 93, 0.25);
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 14px;
+  padding: 14px;
+}
+
 .language-gateway {
   min-height: 100vh;
   display: grid;

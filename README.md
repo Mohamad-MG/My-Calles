@@ -1,6 +1,6 @@
 # MyCalls Operational Dashboard
 
-Static internal MVP dashboard for running the MyCalls revenue workflow:
+Internal dashboard plus lightweight shared backend for running the MyCalls revenue workflow:
 - Executive Focus
 - Sector & Offer Board
 - Pipeline Board
@@ -9,37 +9,60 @@ Static internal MVP dashboard for running the MyCalls revenue workflow:
 
 ## Local Run
 
-This app must run over HTTP, not `file://`.
+This app must run through the shared Node server, not `file://`.
 
 From this folder:
 
 ```bash
-python -m http.server 4173
+npm start
 ```
 
 Then open:
 
 ```text
-http://localhost:4173
+http://localhost:4173/en/
 ```
+
+The server provides:
+- Static dashboard pages
+- Shared persistent dashboard state
+- Audit logging for every mutation
+- Lightweight observability for validation
+
+State is stored under `data/` and is shared across sessions.
+
+## API Surface
+
+- `GET /state`
+- `PATCH /:entity/:id`
+- `POST /sectors`
+- `POST /leads`
+- `POST /opportunities`
+- `POST /state/restore-seed`
+- `POST /state/reset-shared`
+- `GET /debug/observability`
+
+## Validation Mode
+
+For real-world usage validation, the system now monitors:
+- Shared state sync across sessions
+- Last-write-wins conflicts
+- API latency and failures
+- Audit trail completeness for each mutation
+
+Optional lightweight debug visibility:
+- Open the dashboard with `?debug` to see validation logs in the browser console
+- Check `GET /debug/observability` for a simple runtime summary
 
 ## Why `file://` Is Unsupported
 
-The dashboard boots through ES modules. Modern browsers block module loading from `file://` due to origin security rules, so the app intentionally shows a support/fallback message in that mode.
+The dashboard boots through ES modules and now depends on the shared backend API. Modern browsers block module loading from `file://`, and the API is unavailable there, so the app intentionally shows a support/fallback message in that mode.
 
-## GitHub Pages Deployment
+## Deployment Note
 
-This project is ready to deploy as a static site from the repository root.
-
-Basic branch deployment:
-1. Push this folder contents to the repository root.
-2. In GitHub: `Settings -> Pages`.
-3. Set `Source` to `Deploy from a branch`.
-4. Select your branch and choose `/ (root)`.
-5. Save and wait for the Pages URL.
+This project is no longer a GitHub Pages-only static site. It now requires the Node server so the dashboard can use shared state and audit logging.
 
 ## Supported Runtime Environments
 
-- Supported: GitHub Pages over `https://...`
-- Supported: local HTTP servers such as `http://localhost:4173`
+- Supported: the bundled Node server at `http://localhost:4173`
 - Unsupported: direct `file://.../index.html`

@@ -15,6 +15,7 @@ import {
   getRequiredValidationErrors,
   serializeDashboardState,
   getTodayQueue,
+  hasOpportunityForLead,
   validateLeadTransition,
   validateOpportunityTransition,
 } from "./logic.mjs";
@@ -96,6 +97,15 @@ test("metrics stay consistent with staged records", () => {
   assert.ok(metrics.pipelineValue > 0);
 });
 
+test("closed-out or disqualified lead stages do not inflate positive funnel counts", () => {
+  const seed = createSeedData();
+  const metrics = getMetrics(seed);
+
+  assert.equal(metrics.targeted, 4);
+  assert.equal(metrics.contacted, 4);
+  assert.equal(metrics.replied, 3);
+});
+
 test("opportunity becomes delayed automatically when next step date is in the past", () => {
   const seed = createSeedData();
   const delayedOpportunity = seed.opportunities.find((opportunity) => opportunity.id === "opp-3");
@@ -126,6 +136,30 @@ test("normalization fills missing collections safely", () => {
   assert.equal(normalized.weeklyFocus.week, "2026-W16");
   assert.equal(normalized.sectors[0].owner, "Agent 1");
   assert.equal(normalized.sectors.filter((sector) => sector.is_active).length, 1);
+});
+
+test("normalization preserves no-active-sector state instead of inventing one", () => {
+  const normalized = normalizeDashboardState({
+    weeklyFocus: { week: "2026-W16", active_sector_id: "" },
+    sectors: [
+      { id: "s1", sector_name: "قطاع 1", status: "Paused", is_active: false },
+      { id: "s2", sector_name: "قطاع 2", status: "Testing", is_active: false },
+    ],
+    leads: [],
+    opportunities: [],
+  });
+
+  assert.equal(normalized.weeklyFocus.active_sector_id, "");
+  assert.equal(normalized.weeklyFocus.current_offer, "");
+  assert.equal(normalized.sectors.filter((sector) => sector.is_active).length, 0);
+});
+
+test("lead can be checked for existing opportunities before conversion", () => {
+  const seed = createSeedData();
+
+  assert.equal(hasOpportunityForLead(seed.opportunities, "lead-2"), true);
+  assert.equal(hasOpportunityForLead(seed.opportunities, "lead-4"), true);
+  assert.equal(hasOpportunityForLead(seed.opportunities, "lead-1"), false);
 });
 
 test("lead guard flags expose missing handoff and overdue states", () => {

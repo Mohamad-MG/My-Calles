@@ -5,7 +5,6 @@ import {
   OPPORTUNITY_STAGES,
   createSeedData,
   deepClone,
-  enforceSingleActiveSector,
   getAgentSummaries,
   getComputedLeadStage,
   getLeadGuardFlags,
@@ -16,10 +15,8 @@ import {
   getMetrics,
   getRequiredValidationErrors,
   getTodayQueue,
-  hydrateDashboardState,
+  hasOpportunityForLead,
   normalizeDashboardState,
-  serializeDashboardState,
-  stageIndex,
   todayDate,
   validateLeadTransition,
   validateOpportunityTransition,
@@ -166,15 +163,22 @@ const state = {
     message: "",
   },
   notice: "",
+  guidance: null,
   storage: {
-    key: "",
     available: true,
-    source: "seed",
+    source: "shared",
     lastSavedAt: null,
+    snapshot: "",
+    syncTimer: null,
+    version: 0,
+    conflictCount: 0,
   },
 };
 
 let elements = null;
+const SYNC_INTERVAL_MS = 15000;
+const clientSessionId = globalThis.crypto?.randomUUID?.() || `session-${Date.now()}`;
+const DEBUG_VALIDATION = new URLSearchParams(window.location.search).has("debug");
 
 function copy() {
   return state.copy || FALLBACK_COPY;
@@ -271,19 +275,170 @@ function localizeMessages(messages) {
   return messages.map((message) => localizeMessage(message));
 }
 
-function localStorageAvailable() {
-  try {
-    const probe = "__mycalls_probe__";
-    window.localStorage.setItem(probe, probe);
-    window.localStorage.removeItem(probe);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function setNotice(message) {
   state.notice = message;
+}
+
+function setGuidance(guidance = null) {
+  state.guidance = guidance;
+}
+
+function guidanceLabel(key) {
+  const labels = {
+    dismiss: copy().meta.lang === "ar" ? "إخفاء" : "Dismiss",
+    openOpportunity: copy().meta.lang === "ar" ? "افتح الفرصة" : "Open opportunity",
+    createOpportunity: copy().meta.lang === "ar" ? "حوّل إلى فرصة" : "Create opportunity",
+    openLead: copy().meta.lang === "ar" ? "افتح الجهة" : "Open lead",
+    createLead: copy().meta.lang === "ar" ? "أنشئ جهة جديدة" : "Create lead",
+    reviewOpportunity: copy().meta.lang === "ar" ? "راجع الفرصة" : "Review opportunity",
+  };
+  return labels[key] || key;
+}
+
+function getOpportunityByLeadId(leadId) {
+  return state.data.opportunities.find((opportunity) => opportunity.origin_lead_id === leadId);
+}
+
+function getMutationGuidance({ entityType, record, action = "update" }) {
+  if (!record) {
+    return null;
+  }
+
+  if (entityType === "sector") {
+    if (record.is_active) {
+      return {
+        message:
+          copy().meta.lang === "ar"
+            ? `الخطوة التالية: افتح جهة جديدة داخل ${record.sector_name} أو راجع اللِيدز الحالية لهذا القطاع.`
+            : `Next step: create or review leads inside ${record.sector_name}.`,
+        action: {
+          type: "create-record",
+          entityType: "lead",
+          label: guidanceLabel("createLead"),
+        },
+      };
+    }
+
+    return {
+      message:
+        copy().meta.lang === "ar"
+          ? `الخطوة التالية: راجع ما إذا كان هذا القطاع يحتاج تفعيلًا لاحقًا أو أبقه في المتابعة فقط.`
+          : "Next step: decide whether this sector needs activation later or should stay in monitoring.",
+      action: {
+        type: "open-record",
+        entityType: "sector",
+        entityId: record.id,
+        label: record.sector_name,
+      },
+    };
+  }
+
+  if (entityType === "lead") {
+    if (record.current_stage === "Handoff Sent" && record.handoff_summary && !getOpportunityByLeadId(record.id)) {
+      return {
+        message:
+          copy().meta.lang === "ar"
+            ? `الخطوة التالية: هذه الجهة جاهزة الآن للتحويل إلى فرصة.`
+            : "Next step: this lead is now ready to become an opportunity.",
+        action: {
+          type: "convert-lead",
+          leadId: record.id,
+          label: guidanceLabel("createOpportunity"),
+        },
+      };
+    }
+
+    if (record.current_stage === "Meeting Booked") {
+      return {
+        message:
+          copy().meta.lang === "ar"
+            ? `الخطوة التالية: بعد الاجتماع، أكمل handoff واضح قبل نقل الجهة إلى الفرص.`
+            : "Next step: complete a clear handoff after the meeting before moving this lead into opportunities.",
+        action: {
+          type: "open-record",
+          entityType: "lead",
+          entityId: record.id,
+          label: guidanceLabel("openLead"),
+        },
+      };
+    }
+
+    return {
+      message:
+        copy().meta.lang === "ar"
+          ? `الخطوة التالية: ${record.next_step || "راجع الجهة وحدد خطوة عملية تالية."}`
+          : `Next step: ${record.next_step || "review the lead and set a concrete next step."}`,
+      action: {
+        type: "open-record",
+        entityType: "lead",
+        entityId: record.id,
+        label: guidanceLabel("openLead"),
+      },
+    };
+  }
+
+  if (entityType === "opportunity") {
+    return {
+      message:
+        copy().meta.lang === "ar"
+          ? `الخطوة التالية: ${record.next_step || "حافظ على momentum وحدد الخطوة التجارية التالية."}`
+          : `Next step: ${record.next_step || "keep momentum and define the next commercial move."}`,
+      action: {
+        type: "open-record",
+        entityType: "opportunity",
+        entityId: record.id,
+        label: guidanceLabel("reviewOpportunity"),
+      },
+    };
+  }
+
+  return action === "create"
+    ? {
+        message:
+          copy().meta.lang === "ar"
+            ? "تم حفظ التغيير. اختر الخطوة التالية مباشرة حتى لا تتوقف الجلسة هنا."
+            : "Change saved. Take the next step now so the session keeps moving.",
+      }
+    : null;
+}
+
+function getRecoveryGuidance(errorMessage, context = {}) {
+  if (errorMessage.includes("An opportunity already exists for this lead.")) {
+    const opportunity = getOpportunityByLeadId(context.leadId);
+    return opportunity
+      ? {
+          message:
+            copy().meta.lang === "ar"
+              ? "هذه الجهة تحولت بالفعل إلى فرصة. أكمل العمل من سجل الفرصة الحالي بدل التوقف هنا."
+              : "This lead is already an opportunity. Continue from the existing opportunity instead of stopping here.",
+          action: {
+            type: "open-record",
+            entityType: "opportunity",
+            entityId: opportunity.id,
+            label: guidanceLabel("openOpportunity"),
+          },
+        }
+      : null;
+  }
+
+  if (errorMessage.includes("Opportunity can only be created from a Handoff Sent lead.")) {
+    return {
+      message:
+        copy().meta.lang === "ar"
+          ? "لا تنتقل للفرصة الآن. أكمل handoff داخل الجهة أولًا ثم أعد المحاولة."
+          : "Do not move into opportunities yet. Complete the lead handoff first, then try again.",
+      action: context.leadId
+        ? {
+            type: "open-record",
+            entityType: "lead",
+            entityId: context.leadId,
+            label: guidanceLabel("openLead"),
+          }
+        : null,
+    };
+  }
+
+  return null;
 }
 
 function getSeedData() {
@@ -291,60 +446,155 @@ function getSeedData() {
   return normalizeDashboardState(seedFactory(deepClone(createSeedData())));
 }
 
-function persistDashboardState() {
-  if (!state.storage.available) {
-    return;
-  }
-
-  window.localStorage.setItem(state.storage.key, serializeDashboardState(state.data));
+function updateStorageTimestamp() {
   state.storage.lastSavedAt = new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   }).format(new Date());
-  state.storage.source = "local";
 }
 
-function loadInitialDashboardState() {
-  state.storage.available = localStorageAvailable();
-  if (!state.storage.available) {
-    state.storage.source = "memory-only";
-    return getSeedData();
-  }
-
-  const raw = window.localStorage.getItem(state.storage.key);
-  if (!raw) {
-    state.storage.source = "seed";
-    return getSeedData();
-  }
-
-  const hydrated = hydrateDashboardState(raw);
-  state.storage.source = "local";
-  if (hydrated.recovered) {
-    setNotice(copy().messages.notices.recoveredSeed);
-  }
-  return hydrated.data;
-}
-
-function setData(nextData, message = "") {
+function applyStateSnapshot(nextData, { message = "", source = "shared" } = {}) {
   state.data = normalizeDashboardState(nextData);
-  persistDashboardState();
+  state.storage.snapshot = JSON.stringify(state.data);
+  state.storage.available = source !== "memory-only";
+  state.storage.source = source;
+  state.storage.version = Number(nextData?._meta?.version || state.storage.version || 0);
+  if (source !== "memory-only") {
+    updateStorageTimestamp();
+  }
   if (message) {
     setNotice(message);
   }
 }
 
-function resetToSeed({ clearStorage = false } = {}) {
-  if (clearStorage && state.storage.available) {
-    window.localStorage.removeItem(state.storage.key);
-    state.storage.lastSavedAt = null;
-    state.storage.source = "seed";
+function getClientActor() {
+  return `organic-board:${state.locale}:${clientSessionId}`;
+}
+
+async function apiRequest(path, { method = "GET", body } = {}) {
+  const startedAt = performance.now();
+  const response = await fetch(path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "X-User": getClientActor(),
+      "X-Session-Id": clientSessionId,
+      "X-Known-State-Version": String(state.storage.version || 0),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  const apiResult = {
+    payload,
+    version: Number(response.headers.get("X-State-Version") || 0),
+    conflictDetected: response.headers.get("X-Conflict-Detected") === "1",
+    latencyMs: Number((performance.now() - startedAt).toFixed(2)),
+  };
+  if (!response.ok) {
+    const error = new Error(payload.error || `Request failed with status ${response.status}`);
+    error.api = apiResult;
+    throw error;
   }
 
-  state.data = getSeedData();
-  if (!clearStorage) {
-    persistDashboardState();
+  return apiResult;
+}
+
+async function refreshState({ silent = false, render = true } = {}) {
+  try {
+    const remoteState = await apiRequest("/state");
+    const snapshot = JSON.stringify(normalizeDashboardState(remoteState.payload));
+    const changed = snapshot !== state.storage.snapshot;
+    applyStateSnapshot(remoteState.payload, { source: "shared" });
+    if (DEBUG_VALIDATION) {
+      console.debug("[validation] state refresh", {
+        session: clientSessionId,
+        version: remoteState.version,
+        changed,
+        latencyMs: remoteState.latencyMs,
+      });
+    }
+    if (render && changed && !state.drawer.open) {
+      renderApp();
+    }
+    return remoteState.payload;
+  } catch (error) {
+    state.storage.available = false;
+    state.storage.source = "memory-only";
+    if (!silent) {
+      setNotice(copy().messages.notices.serverUnavailable || error.message);
+    }
+    if (!state.storage.snapshot) {
+      applyStateSnapshot(getSeedData(), { source: "memory-only" });
+    }
+    if (render) {
+      renderApp();
+    }
+    return state.data;
   }
+}
+
+async function loadInitialDashboardState() {
+  return refreshState({ silent: false, render: false });
+}
+
+async function mutateState(path, { method = "PATCH", body, message = "", recoveryContext = null } = {}) {
+  try {
+    const remoteState = await apiRequest(path, { method, body });
+    applyStateSnapshot(remoteState.payload, { message, source: "shared" });
+    if (remoteState.conflictDetected) {
+      state.storage.conflictCount += 1;
+      console.warn("[validation] conflict detected, last-write-wins applied", {
+        path,
+        session: clientSessionId,
+        version: remoteState.version,
+      });
+    } else if (DEBUG_VALIDATION) {
+      console.debug("[validation] mutation applied", {
+        path,
+        session: clientSessionId,
+        version: remoteState.version,
+        latencyMs: remoteState.latencyMs,
+      });
+    }
+    return remoteState.payload;
+  } catch (error) {
+    const recoveryGuidance = getRecoveryGuidance(error.message, recoveryContext || {});
+    if (recoveryGuidance) {
+      setGuidance(recoveryGuidance);
+    }
+    console.error("[validation] api mutation failed", {
+      path,
+      session: clientSessionId,
+      message: error.message,
+      latencyMs: error.api?.latencyMs || null,
+    });
+    setNotice(error.message);
+    renderApp();
+    throw error;
+  }
+}
+
+async function resetToSeed({ clearStorage = false } = {}) {
+  const endpoint = clearStorage ? "/state/reset-shared" : "/state/restore-seed";
+  const message = clearStorage
+    ? copy().messages.notices.localCleared
+    : copy().messages.notices.seedRestored;
+  await mutateState(endpoint, { method: "POST", message });
+}
+
+function startStateSync() {
+  if (state.storage.syncTimer) {
+    clearInterval(state.storage.syncTimer);
+  }
+
+  state.storage.syncTimer = window.setInterval(() => {
+    if (document.hidden) {
+      return;
+    }
+    refreshState({ silent: true, render: !state.drawer.open });
+  }, SYNC_INTERVAL_MS);
 }
 
 function formatDate(dateValue) {
@@ -585,7 +835,7 @@ function renderSidebarWeeklyFocus() {
     <div class="focus-chip" dir="${inferTextDirection(activeSector?.sector_name)}">${
       activeSector?.sector_name || getValueLabel("noActiveSector", "No active sector")
     }</div>
-    <p class="sidebar-copy">${state.data.weeklyFocus.current_offer}</p>
+    <p class="sidebar-copy">${state.data.weeklyFocus.current_offer || getValueLabel("noActiveOffer", "No active offer")}</p>
     <p class="sidebar-note">${state.data.weeklyFocus.weekly_target}</p>
   `;
 }
@@ -664,7 +914,7 @@ function setScreenActions(html) {
   const storageLabel = state.storage.available
     ? state.storage.lastSavedAt
       ? copy().chrome.storage.savedLocally(state.storage.lastSavedAt)
-      : state.storage.source === "local"
+      : state.storage.source === "shared"
         ? copy().chrome.storage.localLoaded
         : copy().chrome.storage.seedMode
     : copy().chrome.storage.memoryOnly;
@@ -678,34 +928,89 @@ function setScreenActions(html) {
 }
 
 function attachActionListeners() {
-  elements.screenActions.querySelectorAll("[data-action]").forEach((button) => {
+  elements.content.querySelectorAll("[data-guidance-dismiss]").forEach((button) => {
     button.addEventListener("click", () => {
+      setGuidance(null);
+      setNotice("");
+      renderApp();
+    });
+  });
+
+  elements.content.querySelectorAll("[data-guidance-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const actionType = button.dataset.guidanceAction;
+      if (actionType === "open-record") {
+        setDrawer({
+          open: true,
+          kind: "detail",
+          entityType: button.dataset.guidanceEntity,
+          entityId: button.dataset.guidanceId,
+          mode: "view",
+          message: "",
+        });
+      }
+      if (actionType === "create-record") {
+        setDrawer({
+          open: true,
+          kind: "create",
+          entityType: button.dataset.guidanceEntity,
+          mode: "create",
+          message: "",
+        });
+      }
+      if (actionType === "convert-lead" && button.dataset.guidanceLead) {
+        convertLeadToOpportunity(button.dataset.guidanceLead);
+      }
+    });
+  });
+
+  elements.screenActions.querySelectorAll("[data-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
       const action = button.dataset.action;
-      if (action === "restore-seed") {
-        resetToSeed();
-        setNotice(copy().messages.notices.seedRestored);
-        renderApp();
-      }
-      if (action === "reset-local") {
-        resetToSeed({ clearStorage: true });
-        setNotice(copy().messages.notices.localCleared);
-        renderApp();
-      }
-      if (action === "new-sector") {
-        setDrawer({ open: true, kind: "create", entityType: "sector", mode: "create", message: "" });
-      }
-      if (action === "new-lead") {
-        setDrawer({ open: true, kind: "create", entityType: "lead", mode: "create", message: "" });
-      }
-      if (action === "new-opportunity") {
-        setDrawer({ open: true, kind: "create", entityType: "opportunity", mode: "create", message: "" });
+      try {
+        if (action === "restore-seed") {
+          await resetToSeed();
+          renderApp();
+        }
+        if (action === "reset-local") {
+          await resetToSeed({ clearStorage: true });
+          renderApp();
+        }
+        if (action === "new-sector") {
+          setDrawer({ open: true, kind: "create", entityType: "sector", mode: "create", message: "" });
+        }
+        if (action === "new-lead") {
+          setDrawer({ open: true, kind: "create", entityType: "lead", mode: "create", message: "" });
+        }
+        if (action === "new-opportunity") {
+          setDrawer({ open: true, kind: "create", entityType: "opportunity", mode: "create", message: "" });
+        }
+      } catch {
+        // Notice is already set by the mutation helper.
       }
     });
   });
 }
 
 function renderNotice() {
-  return state.notice ? `<div class="flash-banner">${state.notice}</div>` : "";
+  if (!state.notice && !state.guidance) {
+    return "";
+  }
+
+  const guidanceAction = state.guidance?.action
+    ? `<button class="ghost-button tight" type="button" data-guidance-action="${state.guidance.action.type}" data-guidance-entity="${state.guidance.action.entityType || ""}" data-guidance-id="${state.guidance.action.entityId || ""}" data-guidance-lead="${state.guidance.action.leadId || ""}">${state.guidance.action.label}</button>`
+    : "";
+
+  return `
+    <div class="flash-banner guidance-banner">
+      ${state.notice ? `<p>${state.notice}</p>` : ""}
+      ${state.guidance?.message ? `<p>${state.guidance.message}</p>` : ""}
+      <div class="guidance-actions">
+        ${guidanceAction}
+        <button class="ghost-button tight" type="button" data-guidance-dismiss="true">${guidanceLabel("dismiss")}</button>
+      </div>
+    </div>
+  `;
 }
 
 function formatAgentMission(agent, metrics) {
@@ -725,7 +1030,7 @@ function formatAgentMission(agent, metrics) {
 }
 
 function renderOrganicLeadHuntingBoard() {
-  const activeSector = getSectorById(state.data.weeklyFocus.active_sector_id) || state.data.sectors[0];
+  const activeSector = getSectorById(state.data.weeklyFocus.active_sector_id);
   const activeSectorId = activeSector?.id;
   
   const sectorLeads = state.data.leads.filter(l => l.sector_id === activeSectorId);
@@ -796,6 +1101,15 @@ function renderOrganicLeadHuntingBoard() {
   const highIntentCount = qualifiedLeads.length + opportunities.length;
 
   setScreenActions("");
+
+  if (!activeSector) {
+    return `
+      <div class="empty-state">
+        <p class="empty-title">${getValueLabel("noActiveSector", "No active sector")}</p>
+        <p class="empty-copy">${getValueLabel("selectOneSector", "Select one sector only and focus it hard.")}</p>
+      </div>
+    `;
+  }
 
   return `
     <div class="org-hunting-board">
@@ -1384,6 +1698,10 @@ function renderSectorDrawer(sector) {
         <label><span>${getFieldLabel("owner", "Owner")}</span><input name="owner" value="${sector.owner || ""}" /></label>
         <label><span>${getFieldLabel("nextStep", "Next Step")}</span><input name="next_step" value="${sector.next_step || ""}" /></label>
         <label><span>${getFieldLabel("nextStepDate", "Next Step Date")}</span><input type="date" name="next_step_date" value="${sector.next_step_date || ""}" /></label>
+        <label><span>${getFieldLabel("urgencyAngle", "Urgency angle")}</span><textarea name="urgency_angle">${sector.urgency_angle || ""}</textarea></label>
+        <label><span>${getFieldLabel("whyThisSector", "Why this sector")}</span><textarea name="why_this_sector">${sector.why_this_sector || ""}</textarea></label>
+        <label><span>${getFieldLabel("whyNow", "Why now")}</span><textarea name="why_now">${sector.why_now || ""}</textarea></label>
+        <label><span>${getFieldLabel("disqualifyRules", "Disqualify rules")}</span><textarea name="disqualify_rules">${sector.disqualify_rules || ""}</textarea></label>
         <label><span>${getFormLabel("notes", "notes")}</span><textarea name="notes">${sector.notes || ""}</textarea></label>
         <div class="form-actions">
           <button class="ghost-button" type="button" data-set-active="${sector.id}">${copy().chrome.buttons.setActive}</button>
@@ -1397,7 +1715,11 @@ function renderSectorDrawer(sector) {
 function renderLeadDrawer(lead) {
   const computedStage = getComputedLeadStage(lead, todayDate());
   const sector = getSectorById(lead.sector_id);
-  const eligibleForOpportunity = lead.current_stage === "Handoff Sent" && lead.handoff_summary;
+  const linkedOpportunity = getOpportunityByLeadId(lead.id);
+  const eligibleForOpportunity =
+    lead.current_stage === "Handoff Sent" &&
+    lead.handoff_summary &&
+    !hasOpportunityForLead(state.data.opportunities, lead.id);
   const guardFlags = getLeadGuardFlags(lead, todayDate());
   return `
     <section class="drawer-section">
@@ -1420,6 +1742,33 @@ function renderLeadDrawer(lead) {
       ${fieldRow(getFieldLabel("shortNote", "Short Note"), lead.notes)}
       ${fieldRow(getFieldLabel("handoffSummary", "Handoff Summary"), lead.handoff_summary || getValueLabel("notReadyYet", "Not ready yet"))}
     </section>
+    ${
+      lead.current_stage === "Handoff Sent" || linkedOpportunity
+        ? `
+          <section class="drawer-section">
+            <h4>${copy().meta.lang === "ar" ? "خطوة التقدم التالية" : "Progression"}</h4>
+            <div class="progression-card">
+              <p>${
+                linkedOpportunity
+                  ? copy().meta.lang === "ar"
+                    ? "هذه الجهة تحولت بالفعل إلى فرصة. الأفضل الآن متابعة التنفيذ من سجل الفرصة."
+                    : "This lead has already progressed into an opportunity. Continue execution from the opportunity record."
+                  : copy().meta.lang === "ar"
+                    ? "الـ handoff مكتمل. الخطوة الطبيعية التالية الآن هي إنشاء فرصة ومتابعة التنفيذ هناك."
+                    : "The handoff is complete. The natural next step is to create an opportunity and continue execution there."
+              }</p>
+              <div class="guidance-actions">
+                ${
+                  linkedOpportunity
+                    ? `<button class="ghost-button tight" type="button" data-open-record="opportunity:${linkedOpportunity.id}">${guidanceLabel("openOpportunity")}</button>`
+                    : `<button class="ghost-button tight" type="button" data-convert-lead="${lead.id}">${guidanceLabel("createOpportunity")}</button>`
+                }
+              </div>
+            </div>
+          </section>
+        `
+        : ""
+    }
     <section class="drawer-section">
       <h4>${getFieldLabel("quickEdit", "Quick Edit")}</h4>
       <form data-save-form="lead" data-entity-id="${lead.id}">
@@ -1541,6 +1890,10 @@ function renderOpportunityDrawer(opportunity) {
         </label>
         <label><span>${getFieldLabel("nextStep", "Next Step")}</span><input name="next_step" value="${opportunity.next_step || ""}" /></label>
         <label><span>${getFieldLabel("nextStepDate", "Next Step Date")}</span><input type="date" name="next_step_date" value="${opportunity.next_step_date || ""}" /></label>
+        <label><span>${getFieldLabel("estimatedValue", "Estimated Value")}</span><input type="number" min="0" step="1" name="estimated_value" value="${opportunity.estimated_value || 0}" /></label>
+        <label><span>${getFieldLabel("closeProbability", "Close Probability")}</span><input type="number" min="0" max="100" step="1" name="close_probability" value="${opportunity.close_probability || 0}" /></label>
+        <label><span>${getFieldLabel("decisionStatus", "Decision Status")}</span><textarea name="decision_status">${opportunity.decision_status || ""}</textarea></label>
+        <label><span>${getFieldLabel("stakeholderMap", "Stakeholder Map")}</span><textarea name="stakeholder_map">${opportunity.stakeholder_map || ""}</textarea></label>
         <label><span>${getFieldLabel("buyerReadiness", "Buyer Readiness")}</span><input name="buyer_readiness" value="${opportunity.buyer_readiness || ""}" /></label>
         <label><span>${getFieldLabel("useCase", "Use Case")}</span><textarea name="use_case">${opportunity.use_case || ""}</textarea></label>
         <label><span>${getFieldLabel("stakeholderStatus", "Stakeholder Status")}</span><textarea name="stakeholder_status">${opportunity.stakeholder_status || ""}</textarea></label>
@@ -1689,21 +2042,25 @@ function readFormValues(form) {
   return Object.fromEntries(data.entries());
 }
 
-function patchEntity(entityType, entityId, patch) {
-  const nextData = deepClone(state.data);
+async function patchEntity(entityType, entityId, patch, message = "") {
+  const entityPath =
+    entityType === "sector" ? "sectors" : entityType === "lead" ? "leads" : "opportunities";
+  const payload = { ...patch };
+  if (entityType !== "sector" && patch.current_stage) {
+    payload.stage_updated_at = todayDate();
+  }
+  const nextState = await mutateState(`/${entityPath}/${entityId}`, {
+    method: "PATCH",
+    body: payload,
+    message,
+  });
   const collectionKey =
     entityType === "sector" ? "sectors" : entityType === "lead" ? "leads" : "opportunities";
-  const index = nextData[collectionKey].findIndex((item) => item.id === entityId);
-  nextData[collectionKey][index] = {
-    ...nextData[collectionKey][index],
-    ...patch,
-    stage_updated_at:
-      entityType !== "sector" && patch.current_stage ? todayDate() : nextData[collectionKey][index].stage_updated_at,
-  };
-  setData(nextData);
+  const updatedRecord = nextState[collectionKey].find((item) => item.id === entityId);
+  setGuidance(getMutationGuidance({ entityType, record: updatedRecord, action: "update" }));
 }
 
-function saveSectorForm(form) {
+async function saveSectorForm(form) {
   const entityId = form.dataset.entityId;
   const patch = readFormValues(form);
   patch.notes = patch.notes || "";
@@ -1727,12 +2084,12 @@ function saveSectorForm(form) {
     return;
   }
 
-  patchEntity("sector", entityId, patch);
+  await patchEntity("sector", entityId, patch, copy().messages.notices.sectorUpdated);
   setDrawer({ message: copy().messages.notices.sectorUpdated });
   renderApp();
 }
 
-function saveLeadForm(form) {
+async function saveLeadForm(form) {
   const entityId = form.dataset.entityId;
   const existing = state.data.leads.find((lead) => lead.id === entityId);
   const patch = { ...existing, ...readFormValues(form) };
@@ -1754,20 +2111,20 @@ function saveLeadForm(form) {
     return;
   }
 
-  patchEntity("lead", entityId, patch);
+  await patchEntity("lead", entityId, patch, copy().messages.notices.leadUpdated);
   setDrawer({ message: copy().messages.notices.leadUpdated });
   renderApp();
 }
 
-function saveOpportunityForm(form) {
+async function saveOpportunityForm(form) {
   const entityId = form.dataset.entityId;
   const existing = state.data.opportunities.find((opportunity) => opportunity.id === entityId);
   const patch = { ...existing, ...readFormValues(form) };
-  patch.estimated_value = existing.estimated_value;
-  patch.stakeholder_map = existing.stakeholder_map;
-  patch.close_probability = existing.close_probability;
+  patch.estimated_value = Number(patch.estimated_value || 0);
+  patch.stakeholder_map = patch.stakeholder_map || "";
+  patch.close_probability = Math.max(0, Math.min(100, Number(patch.close_probability || 0)));
   patch.risk_flag = existing.risk_flag;
-  patch.decision_status = existing.decision_status;
+  patch.decision_status = patch.decision_status || "";
   patch.origin_lead_id = existing.origin_lead_id;
   patch.sector_id = existing.sector_id;
   const errors = [
@@ -1780,14 +2137,13 @@ function saveOpportunityForm(form) {
     return;
   }
 
-  patchEntity("opportunity", entityId, patch);
+  await patchEntity("opportunity", entityId, patch, copy().messages.notices.opportunityUpdated);
   setDrawer({ message: copy().messages.notices.opportunityUpdated });
   renderApp();
 }
 
-function createEntity(entityType, form) {
+async function createEntity(entityType, form) {
   const values = readFormValues(form);
-  const nextData = deepClone(state.data);
 
   if (entityType === "sector") {
     const draft = {
@@ -1816,15 +2172,17 @@ function createEntity(entityType, form) {
       setDrawer({ message: localizeMessages(errors).join(" ") });
       return;
     }
-    nextData.sectors.unshift(draft);
-    setData(
-      draft.is_active ? enforceSingleActiveSector(nextData, draft.id) : nextData,
-      copy().messages.notices.sectorCreated,
-    );
+    const nextState = await mutateState("/sectors", {
+      method: "POST",
+      body: draft,
+      message: copy().messages.notices.sectorCreated,
+    });
+    const createdSector = nextState.sectors.find((item) => item.id === draft.id);
+    setGuidance(getMutationGuidance({ entityType: "sector", record: createdSector, action: "create" }));
   }
 
   if (entityType === "lead") {
-    const sector = nextData.sectors.find((item) => item.id === values.sector_id);
+    const sector = state.data.sectors.find((item) => item.id === values.sector_id);
     if (!sector?.is_active) {
       setDrawer({ message: localizeMessage("Agent 2 can only create new leads for the active sector.") });
       return;
@@ -1858,14 +2216,29 @@ function createEntity(entityType, form) {
       setDrawer({ message: errors.join(" ") });
       return;
     }
-    nextData.leads.unshift(draft);
-    setData(nextData, copy().messages.notices.leadCreated);
+    const nextState = await mutateState("/leads", {
+      method: "POST",
+      body: draft,
+      message: copy().messages.notices.leadCreated,
+    });
+    const createdLead = nextState.leads.find((item) => item.id === draft.id);
+    setGuidance(getMutationGuidance({ entityType: "lead", record: createdLead, action: "create" }));
   }
 
   if (entityType === "opportunity") {
-    const sourceLead = nextData.leads.find((lead) => lead.id === values.origin_lead_id);
+    const sourceLead = state.data.leads.find((lead) => lead.id === values.origin_lead_id);
     if (!sourceLead || sourceLead.current_stage !== "Handoff Sent" || !sourceLead.handoff_summary) {
+      setGuidance(getRecoveryGuidance("Opportunity can only be created from a Handoff Sent lead.", {
+        leadId: values.origin_lead_id,
+      }));
       setDrawer({ message: localizeMessage("Opportunity can only be created from a Handoff Sent lead.") });
+      return;
+    }
+    if (hasOpportunityForLead(state.data.opportunities, values.origin_lead_id)) {
+      setGuidance(getRecoveryGuidance("An opportunity already exists for this lead.", {
+        leadId: values.origin_lead_id,
+      }));
+      setDrawer({ message: localizeMessage("An opportunity already exists for this lead.") });
       return;
     }
     const draft = {
@@ -1897,8 +2270,14 @@ function createEntity(entityType, form) {
       setDrawer({ message: errors.join(" ") });
       return;
     }
-    nextData.opportunities.unshift(draft);
-    setData(nextData, copy().messages.notices.opportunityCreated);
+    const nextState = await mutateState("/opportunities", {
+      method: "POST",
+      body: draft,
+      message: copy().messages.notices.opportunityCreated,
+      recoveryContext: { leadId: values.origin_lead_id },
+    });
+    const createdOpportunity = nextState.opportunities.find((item) => item.id === draft.id);
+    setGuidance(getMutationGuidance({ entityType: "opportunity", record: createdOpportunity, action: "create" }));
   }
 
   if (entityType === "sector") {
@@ -1914,7 +2293,17 @@ function createEntity(entityType, form) {
 function convertLeadToOpportunity(leadId) {
   const lead = state.data.leads.find((item) => item.id === leadId);
   if (!lead || lead.current_stage !== "Handoff Sent" || !lead.handoff_summary) {
+    setGuidance(getRecoveryGuidance("Opportunity can only be created from a Handoff Sent lead.", {
+      leadId,
+    }));
     setDrawer({ message: localizeMessage("Lead must be Handoff Sent with a handoff summary first.") });
+    return;
+  }
+  if (hasOpportunityForLead(state.data.opportunities, lead.id)) {
+    setGuidance(getRecoveryGuidance("An opportunity already exists for this lead.", {
+      leadId,
+    }));
+    setDrawer({ message: localizeMessage("An opportunity already exists for this lead.") });
     return;
   }
   setDrawer({
@@ -1938,29 +2327,38 @@ function convertLeadToOpportunity(leadId) {
 
 function bindDrawerActions() {
   elements.drawerBody.querySelectorAll("[data-save-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (form.dataset.saveForm === "sector") saveSectorForm(form);
-      if (form.dataset.saveForm === "lead") saveLeadForm(form);
-      if (form.dataset.saveForm === "opportunity") saveOpportunityForm(form);
+      try {
+        if (form.dataset.saveForm === "sector") await saveSectorForm(form);
+        if (form.dataset.saveForm === "lead") await saveLeadForm(form);
+        if (form.dataset.saveForm === "opportunity") await saveOpportunityForm(form);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
     });
   });
 
   elements.drawerBody.querySelectorAll("[data-create-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      createEntity(form.dataset.createForm, form);
+      try {
+        await createEntity(form.dataset.createForm, form);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
     });
   });
 
   elements.drawerBody.querySelectorAll("[data-set-active]").forEach((button) => {
-    button.addEventListener("click", () => {
-      setData(
-        enforceSingleActiveSector(state.data, button.dataset.setActive),
-        copy().messages.notices.activeSectorUpdated,
-      );
-      setDrawer({ message: copy().messages.notices.activeSectorUpdated });
-      renderApp();
+    button.addEventListener("click", async () => {
+      try {
+        await patchEntity("sector", button.dataset.setActive, { is_active: true }, copy().messages.notices.activeSectorUpdated);
+        setDrawer({ message: copy().messages.notices.activeSectorUpdated });
+        renderApp();
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
     });
   });
 
@@ -1978,12 +2376,13 @@ function bindRecordOpeners() {
   });
 
   elements.content.querySelectorAll("[data-set-active]").forEach((button) => {
-    button.addEventListener("click", () => {
-      setData(
-        enforceSingleActiveSector(state.data, button.dataset.setActive),
-        copy().messages.notices.activeSectorUpdated,
-      );
-      renderApp();
+    button.addEventListener("click", async () => {
+      try {
+        await patchEntity("sector", button.dataset.setActive, { is_active: true }, copy().messages.notices.activeSectorUpdated);
+        renderApp();
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
     });
   });
 }
@@ -2041,14 +2440,12 @@ function renderShellChrome() {
   );
 }
 
-function bootstrapApp({ locale = "en", localeConfig = FALLBACK_COPY, storageKey = "" } = {}) {
+async function bootstrapApp({ locale = "en", localeConfig = FALLBACK_COPY } = {}) {
   document.documentElement.classList.remove("app-pending");
   document.documentElement.classList.add("app-ready");
 
   state.locale = locale;
   state.copy = localeConfig;
-  state.storage.key = storageKey;
-  state.data = loadInitialDashboardState();
 
   elements = {
     nav: document.querySelector("#main-nav"),
@@ -2074,6 +2471,8 @@ function bootstrapApp({ locale = "en", localeConfig = FALLBACK_COPY, storageKey 
 
   elements.drawerClose.addEventListener("click", closeDrawer);
   elements.drawerBackdrop.addEventListener("click", closeDrawer);
+  await loadInitialDashboardState();
+  startStateSync();
   renderApp();
 }
 

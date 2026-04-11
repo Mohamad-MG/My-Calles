@@ -46,14 +46,14 @@ const arLocale = {
       no: "لا",
     },
     storage: {
-      savedLocally: (time) => `تم الحفظ محليًا ${time}`,
-      localLoaded: "تم تحميل الحالة المحلية",
-      seedMode: "وضع البيانات التجريبية",
-      memoryOnly: "الذاكرة فقط",
+      savedLocally: (time) => `تمت مزامنة الحالة المشتركة ${time}`,
+      localLoaded: "تم تحميل الحالة المشتركة",
+      seedMode: "تم استرجاع البيانات التجريبية",
+      memoryOnly: "الخادم غير متاح",
     },
     buttons: {
       restoreSeed: "استرجاع البيانات التجريبية",
-      resetLocal: "مسح الحفظ المحلي",
+      resetLocal: "إعادة ضبط الحالة المشتركة",
       newSector: "قطاع جديد",
       newLead: "جهة جديدة",
       newOpportunity: "فرصة جديدة",
@@ -323,8 +323,9 @@ const arLocale = {
   messages: {
     notices: {
       recoveredSeed: "الحالة المحفوظة كانت غير صالحة، لذلك عادت اللوحة إلى بيانات آمنة.",
-      seedRestored: "تم استرجاع البيانات التجريبية وحفظها محليًا.",
-      localCleared: "تم مسح الحالة المحلية وعادت اللوحة إلى وضع البداية.",
+      seedRestored: "تم استرجاع البيانات التجريبية داخل الحالة المشتركة.",
+      localCleared: "تمت إعادة ضبط الحالة المشتركة إلى نسخة بداية جديدة.",
+      serverUnavailable: "الخادم المشترك غير متاح حاليًا. يتم عرض بيانات بداية مؤقتة.",
       activeSectorUpdated: "تم تحديث القطاع النشط. يجب أن يعمل الوكيل 2 على هذا القطاع فقط.",
       sectorUpdated: "تم تحديث القطاع بنجاح.",
       leadUpdated: "تم تحديث الجهة بنجاح.",
@@ -379,6 +380,8 @@ const arLocale = {
         "لا يمكن إنشاء فرصة إلا من جهة وصلت إلى مرحلة تم التسليم.",
       "Lead must be Handoff Sent with a handoff summary first.":
         "يجب أن تصل الجهة إلى مرحلة تم التسليم مع ملخص تسليم أولًا.",
+      "An opportunity already exists for this lead.":
+        "توجد فرصة بالفعل لهذه الجهة، لذلك لا يمكن إنشاء فرصة مكررة.",
     },
   },
   seed: {

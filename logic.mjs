@@ -194,6 +194,10 @@ function stageAtOrAfter(stages, current, minimum) {
   return stageIndex(stages, current) >= stageIndex(stages, minimum);
 }
 
+function hasOpportunityForLead(opportunities, leadId) {
+  return opportunities.some((opportunity) => opportunity.origin_lead_id === leadId);
+}
+
 function isLeadClosed(stage) {
   return ["Disqualified", "No Response"].includes(stage);
 }
@@ -358,6 +362,14 @@ function canCreateOpportunityFromLead(lead) {
   return lead && lead.current_stage === "Handoff Sent" && !isBlank(lead.handoff_summary);
 }
 
+function countLeadMilestone(leads, stages) {
+  return leads.filter((lead) => stages.includes(lead.current_stage)).length;
+}
+
+function countOpportunityMilestone(opportunities, stages) {
+  return opportunities.filter((opportunity) => stages.includes(opportunity.current_stage)).length;
+}
+
 function getTodayQueue(state, today = todayDate()) {
   const upcomingLimit = addDays(7, new Date(today));
   const queue = [];
@@ -447,34 +459,56 @@ function getMetrics(state, today = todayDate()) {
     getComputedOpportunityStage(opportunity, today),
   );
 
-  const targeted = state.leads.filter((lead) =>
-    stageAtOrAfter(LEAD_STAGES, lead.current_stage, "Targeted"),
-  ).length;
-  const contacted = state.leads.filter((lead) =>
-    stageAtOrAfter(LEAD_STAGES, lead.current_stage, "Contacted"),
-  ).length;
-  const replied = state.leads.filter((lead) =>
-    stageAtOrAfter(LEAD_STAGES, lead.current_stage, "Replied"),
-  ).length;
-  const qualified = state.leads.filter((lead) =>
-    stageAtOrAfter(LEAD_STAGES, lead.current_stage, "Qualified"),
-  ).length;
-  const meetings = state.leads.filter((lead) =>
-    stageAtOrAfter(LEAD_STAGES, lead.current_stage, "Meeting Booked"),
-  ).length;
-  const handoffs = state.leads.filter((lead) =>
-    stageAtOrAfter(LEAD_STAGES, lead.current_stage, "Handoff Sent"),
-  ).length;
+  const targeted = countLeadMilestone(state.leads, [
+    "Targeted",
+    "Contacted",
+    "Replied",
+    "Qualified",
+    "Meeting Booked",
+    "Handoff Sent",
+  ]);
+  const contacted = countLeadMilestone(state.leads, [
+    "Contacted",
+    "Replied",
+    "Qualified",
+    "Meeting Booked",
+    "Handoff Sent",
+  ]);
+  const replied = countLeadMilestone(state.leads, [
+    "Replied",
+    "Qualified",
+    "Meeting Booked",
+    "Handoff Sent",
+  ]);
+  const qualified = countLeadMilestone(state.leads, [
+    "Qualified",
+    "Meeting Booked",
+    "Handoff Sent",
+  ]);
+  const meetings = countLeadMilestone(state.leads, ["Meeting Booked", "Handoff Sent"]);
+  const handoffs = countLeadMilestone(state.leads, ["Handoff Sent"]);
 
-  const discoveries = state.opportunities.filter((opportunity) =>
-    stageAtOrAfter(OPPORTUNITY_STAGES, opportunity.current_stage, "Discovery"),
-  ).length;
-  const demos = state.opportunities.filter((opportunity) =>
-    stageAtOrAfter(OPPORTUNITY_STAGES, opportunity.current_stage, "Demo Needed"),
-  ).length;
-  const proposals = state.opportunities.filter((opportunity) =>
-    stageAtOrAfter(OPPORTUNITY_STAGES, opportunity.current_stage, "Proposal Stage"),
-  ).length;
+  const discoveries = countOpportunityMilestone(state.opportunities, [
+    "Discovery",
+    "Qualified Interest",
+    "Demo Needed",
+    "Pilot Candidate",
+    "Proposal Stage",
+    "Negotiation",
+    "Close Ready",
+  ]);
+  const demos = countOpportunityMilestone(state.opportunities, [
+    "Demo Needed",
+    "Pilot Candidate",
+    "Proposal Stage",
+    "Negotiation",
+    "Close Ready",
+  ]);
+  const proposals = countOpportunityMilestone(state.opportunities, [
+    "Proposal Stage",
+    "Negotiation",
+    "Close Ready",
+  ]);
   const wins = state.opportunities.filter((opportunity) => opportunity.current_stage === "Won").length;
 
   const activePipelineValue = state.opportunities
@@ -548,6 +582,7 @@ function getMetrics(state, today = todayDate()) {
     targeted,
     contacted,
     replyRate,
+    replied,
     qualified,
     meetingConversion,
     discoveries,
@@ -599,15 +634,25 @@ function getAgentSummaries(state, today = todayDate()) {
 
 function enforceSingleActiveSector(state, sectorId) {
   const nextState = deepClone(state);
+  const hasTargetSector = nextState.sectors.some((sector) => sector.id === sectorId);
   nextState.sectors = nextState.sectors.map((sector) => ({
     ...sector,
-    is_active: sector.id === sectorId,
-    status: sector.id === sectorId ? "Active" : sector.status === "Active" ? "Testing" : sector.status,
+    is_active: hasTargetSector && sector.id === sectorId,
+    status:
+      hasTargetSector && sector.id === sectorId
+        ? "Active"
+        : sector.status === "Active"
+          ? "Testing"
+          : sector.status,
   }));
-  nextState.weeklyFocus.active_sector_id = sectorId;
-  const activeSector = nextState.sectors.find((sector) => sector.id === sectorId);
+  nextState.weeklyFocus.active_sector_id = hasTargetSector ? sectorId : "";
+  const activeSector = hasTargetSector
+    ? nextState.sectors.find((sector) => sector.id === sectorId)
+    : null;
   if (activeSector) {
     nextState.weeklyFocus.current_offer = activeSector.offer_angle;
+  } else {
+    nextState.weeklyFocus.current_offer = "";
   }
   return nextState;
 }
@@ -646,21 +691,21 @@ function normalizeDashboardState(candidate) {
     return nextState;
   }
 
-  const activeSectors = nextState.sectors.filter(
-    (sector) => sector.is_active || sector.status === "Active",
-  );
-
+  const activeSectors = nextState.sectors.filter((sector) => sector.is_active || sector.status === "Active");
   const preferredActiveId =
     nextState.sectors.find((sector) => sector.id === nextState.weeklyFocus.active_sector_id)?.id ||
     activeSectors[0]?.id ||
-    nextState.sectors[0].id;
-
-  const normalized = enforceSingleActiveSector(nextState, preferredActiveId);
-  normalized.weeklyFocus.current_offer =
-    normalized.weeklyFocus.current_offer ||
-    normalized.sectors.find((sector) => sector.id === normalized.weeklyFocus.active_sector_id)
-      ?.offer_angle ||
     "";
+
+  const normalized = preferredActiveId
+    ? enforceSingleActiveSector(nextState, preferredActiveId)
+    : enforceSingleActiveSector(nextState, "");
+  normalized.weeklyFocus.current_offer = normalized.weeklyFocus.active_sector_id
+    ? normalized.weeklyFocus.current_offer ||
+      normalized.sectors.find((sector) => sector.id === normalized.weeklyFocus.active_sector_id)
+        ?.offer_angle ||
+      ""
+    : "";
 
   return normalized;
 }
@@ -1015,6 +1060,7 @@ export {
   getMetrics,
   getRequiredValidationErrors,
   getTodayQueue,
+  hasOpportunityForLead,
   hydrateDashboardState,
   normalizeDashboardState,
   parseDashboardState,
