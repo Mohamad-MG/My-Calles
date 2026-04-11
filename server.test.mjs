@@ -100,6 +100,74 @@ test("PATCH /sectors/:id can clear the active sector without auto-selecting anot
   }
 });
 
+test("POST /leads is idempotent for duplicate ids and does not write duplicate audit creates", async () => {
+  const { app, baseUrl, tempDir } = await startTestServer();
+
+  try {
+    const payload = {
+      id: "lead-idempotent",
+      company_name: "Baseline Clinic",
+      sector_id: "sector-clinics",
+      contact_name: "Mona",
+      role: "Owner",
+      channel: "WhatsApp",
+      owner: "Admin",
+      current_stage: "Targeted",
+      next_step: "Send opener",
+      next_step_date: "2026-04-11",
+      notes: "",
+      pain_signal: "Missed calls",
+      urgency_level: "Medium",
+      decision_level: "Owner",
+      interest_type: "New",
+      lead_score: 12,
+      last_contact_date: "2026-04-11",
+      handoff_summary: "",
+      stage_updated_at: "2026-04-11",
+    };
+
+    const firstResponse = await fetch(`${baseUrl}/leads`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User": "idempotent-user",
+      },
+      body: JSON.stringify(payload),
+    });
+    const firstState = await firstResponse.json();
+
+    assert.equal(firstResponse.status, 201);
+    assert.equal(firstResponse.headers.get("X-Duplicate-Detected"), "0");
+    assert.equal(firstState.leads.filter((lead) => lead.id === payload.id).length, 1);
+
+    const secondResponse = await fetch(`${baseUrl}/leads`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User": "idempotent-user",
+      },
+      body: JSON.stringify(payload),
+    });
+    const secondState = await secondResponse.json();
+
+    assert.equal(secondResponse.status, 200);
+    assert.equal(secondResponse.headers.get("X-Duplicate-Detected"), "1");
+    assert.equal(secondState.leads.filter((lead) => lead.id === payload.id).length, 1);
+
+    const auditLog = await readFile(path.join(tempDir, "audit-log.jsonl"), "utf8");
+    const createEvents = auditLog
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.entity === "leads" && entry.id === payload.id && entry.action === "create");
+
+    assert.equal(createEvents.length, 1);
+  } finally {
+    await app.stop();
+  }
+});
+
 test("audit log captures before and after for mutations", async () => {
   const { app, baseUrl, tempDir } = await startTestServer();
 
@@ -130,7 +198,7 @@ test("audit log captures before and after for mutations", async () => {
 });
 
 test("conflicting updates are accepted with last-write-wins and logged as conflicts", async () => {
-  const { app, baseUrl, tempDir } = await startTestServer();
+  const { app, baseUrl } = await startTestServer();
 
   try {
     const stateResponse = await fetch(`${baseUrl}/state`, {
@@ -167,8 +235,10 @@ test("conflicting updates are accepted with last-write-wins and logged as confli
     assert.equal(conflictingUpdate.headers.get("X-Conflict-Detected"), "1");
     assert.equal(conflictingState.leads.find((lead) => lead.id === "lead-1").next_step, "Session B overwrite");
 
-    const observabilityLog = await readFile(path.join(tempDir, "observability-log.jsonl"), "utf8");
-    assert.match(observabilityLog, /"conflict_detected":true/);
+    const observabilityResponse = await fetch(`${baseUrl}/debug/observability`);
+    const observability = await observabilityResponse.json();
+    assert.ok(observability.conflicts >= 1);
+    assert.ok(observability.recent.some((entry) => entry.conflict_detected === true));
   } finally {
     await app.stop();
   }

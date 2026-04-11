@@ -377,10 +377,25 @@ class StateStore {
         actor,
         timestamp,
       });
-      return clone(committedState);
+      return {
+        state: clone(committedState),
+        record: clone(draft),
+        created: true,
+        duplicate: false,
+      };
     }
 
     if (entity === "leads") {
+      const existingLead = currentState.leads.find((lead) => lead.id === values.id);
+      if (existingLead) {
+        return {
+          state: clone(currentState),
+          record: clone(existingLead),
+          created: false,
+          duplicate: true,
+        };
+      }
+
       const draft = {
         ...values,
         created_at: timestamp,
@@ -403,7 +418,12 @@ class StateStore {
         actor,
         timestamp,
       });
-      return clone(committedState);
+      return {
+        state: clone(committedState),
+        record: clone(draft),
+        created: true,
+        duplicate: false,
+      };
     }
 
     if (entity === "opportunities") {
@@ -429,7 +449,12 @@ class StateStore {
         actor,
         timestamp,
       });
-      return clone(committedState);
+      return {
+        state: clone(committedState),
+        record: clone(draft),
+        created: true,
+        duplicate: false,
+      };
     }
 
     throw new Error(`Unknown entity "${entity}".`);

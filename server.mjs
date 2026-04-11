@@ -143,9 +143,9 @@ function createAppServer({ rootDir = __dirname, dataDir = path.join(__dirname, "
         kind = "mutation";
         const payload = await readJsonBody(request);
         conflictDetected = knownVersion > 0 && knownVersion !== store.getVersion();
-        const state = await store.createEntity("sectors", payload, actor);
-        statusCode = 201;
-        jsonResponseWithHeaders(response, 201, state, {
+        const result = await store.createEntity("sectors", payload, actor);
+        statusCode = result.created ? 201 : 200;
+        jsonResponseWithHeaders(response, statusCode, result.state, {
           "X-State-Version": String(store.getVersion()),
           "X-Conflict-Detected": conflictDetected ? "1" : "0",
         });
@@ -156,11 +156,12 @@ function createAppServer({ rootDir = __dirname, dataDir = path.join(__dirname, "
         kind = "mutation";
         const payload = await readJsonBody(request);
         conflictDetected = knownVersion > 0 && knownVersion !== store.getVersion();
-        const state = await store.createEntity("leads", payload, actor);
-        statusCode = 201;
-        jsonResponseWithHeaders(response, 201, state, {
+        const result = await store.createEntity("leads", payload, actor);
+        statusCode = result.created ? 201 : 200;
+        jsonResponseWithHeaders(response, statusCode, result.state, {
           "X-State-Version": String(store.getVersion()),
           "X-Conflict-Detected": conflictDetected ? "1" : "0",
+          "X-Duplicate-Detected": result.duplicate ? "1" : "0",
         });
         return;
       }
@@ -169,9 +170,9 @@ function createAppServer({ rootDir = __dirname, dataDir = path.join(__dirname, "
         kind = "mutation";
         const payload = await readJsonBody(request);
         conflictDetected = knownVersion > 0 && knownVersion !== store.getVersion();
-        const state = await store.createEntity("opportunities", payload, actor);
-        statusCode = 201;
-        jsonResponseWithHeaders(response, 201, state, {
+        const result = await store.createEntity("opportunities", payload, actor);
+        statusCode = result.created ? 201 : 200;
+        jsonResponseWithHeaders(response, statusCode, result.state, {
           "X-State-Version": String(store.getVersion()),
           "X-Conflict-Detected": conflictDetected ? "1" : "0",
         });
