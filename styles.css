@@ -85,10 +85,10 @@
   --card-passive-bg:   #F8F9FB;
   --card-passive-shadow: none;
 
-  /* Hero action panel (Today Action Queue) */
-  --hero-action-bg:     #0D1117;
-  --hero-action-border: rgba(37,99,235,0.4);
-  --hero-action-shadow: 0 20px 48px rgba(0,0,0,0.18), 0 6px 16px rgba(37,99,235,0.12);
+  /* Hero action panel (Today Action Queue) — leading, not overpowering */
+  --hero-action-bg:     #1C2B3A;
+  --hero-action-border: rgba(37,99,235,0.22);
+  --hero-action-shadow: 0 8px 28px rgba(0,0,0,0.10), 0 3px 10px rgba(37,99,235,0.07);
 }
 
 /* ── Reset ────────────────────────────────────────────────────── */
@@ -807,19 +807,19 @@ h4 { font-size: 0.875rem; }
   overflow: hidden;
 }
 
-/* Blueprint grid overlay — subtle texture inside hero panel */
+/* Blueprint grid overlay — very subtle texture */
 .analysis-grid > article.panel:nth-child(2)::after {
   content: '';
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(37,99,235,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(37,99,235,0.04) 1px, transparent 1px);
+    linear-gradient(rgba(37,99,235,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37,99,235,0.025) 1px, transparent 1px);
   background-size: 20px 20px;
   pointer-events: none;
 }
 
-/* Accent glow strip at top of hero panel */
+/* Accent top strip — static, soft */
 .analysis-grid > article.panel:nth-child(2)::before {
   content: '';
   position: absolute;
@@ -827,7 +827,8 @@ h4 { font-size: 0.875rem; }
   height: 2px;
   background: linear-gradient(90deg, var(--accent) 0%, #60A5FA 50%, var(--accent) 100%);
   background-size: 200% 100%;
-  animation: kpi-sweep 4s linear infinite;
+  animation: kpi-sweep 8s linear infinite;
+  opacity: 0.65;
   z-index: 1;
 }
 
@@ -836,55 +837,55 @@ h4 { font-size: 0.875rem; }
   100% { background-position: -200% center; }
 }
 
-/* Hero panel text overrides for dark background */
+/* Hero panel text — legible on navy, not harsh white */
 .analysis-grid > article.panel:nth-child(2) .panel-label {
-  color: rgba(96,165,250,0.9);
+  color: rgba(147,197,253,0.8);
 }
 
 .analysis-grid > article.panel:nth-child(2) h3 {
-  color: #F8FAFC;
+  color: #E2EAF4;
 }
 
 .analysis-grid > article.panel:nth-child(2) .rail-item,
 .analysis-grid > article.panel:nth-child(2) button.rail-item {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.09);
-  color: #E2E8F0;
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.1);
+  color: #CBD5E1;
 }
 
 .analysis-grid > article.panel:nth-child(2) button.rail-item:hover {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(99,162,255,0.35);
-  box-shadow: 0 0 0 1px rgba(99,162,255,0.2);
+  background: rgba(255,255,255,0.11);
+  border-color: rgba(99,162,255,0.28);
+  box-shadow: 0 0 0 1px rgba(99,162,255,0.14);
   transform: translateY(-1px);
 }
 
 .analysis-grid > article.panel:nth-child(2) .rail-item strong {
-  color: #F1F5F9;
+  color: #E2EAF4;
   font-weight: 600;
 }
 
 .analysis-grid > article.panel:nth-child(2) .meta-row {
-  color: rgba(255,255,255,0.5);
+  color: rgba(203,213,225,0.55);
 }
 
 .analysis-grid > article.panel:nth-child(2) .pill {
-  background: rgba(37,99,235,0.25);
-  border-color: rgba(99,162,255,0.3);
+  background: rgba(37,99,235,0.2);
+  border-color: rgba(99,162,255,0.22);
   color: #93C5FD;
 }
 
 .analysis-grid > article.panel:nth-child(2) .empty-state {
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.09);
 }
 
 .analysis-grid > article.panel:nth-child(2) .empty-title {
-  color: rgba(255,255,255,0.6);
+  color: rgba(226,234,244,0.65);
 }
 
 .analysis-grid > article.panel:nth-child(2) .empty-copy {
-  color: rgba(255,255,255,0.35);
+  color: rgba(203,213,225,0.38);
 }
 
 /* ── Panel 1 (Source Priority) — strong secondary ──────────────── */
