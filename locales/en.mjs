@@ -40,10 +40,10 @@ const enLocale = {
       no: "No",
     },
     storage: {
-      savedLocally: (time) => `Shared state synced ${time}`,
-      localLoaded: "Shared state loaded",
+      savedLocally: (time) => `Saved locally ${time}`,
+      localLoaded: "Local data loaded",
       seedMode: "Seed restored",
-      memoryOnly: "Server unavailable",
+      memoryOnly: "Storage unavailable",
     },
     buttons: {
       restoreSeed: "Restore Seed",

@@ -2,8 +2,11 @@ import {
   LEAD_STAGES,
   OPPORTUNITY_STAGES,
   SOURCE_WORKFLOW_BUCKETS,
+  STORAGE_KEY,
   createSeedData,
   deepClone,
+  parseDashboardState,
+  serializeDashboardState,
   getComputedLeadStage,
   getLeadGuardFlags,
   getLeadWorkflowBucket,
@@ -155,18 +158,14 @@ const state = {
   guidance: null,
   storage: {
     available: true,
-    source: "shared",
+    source: "local",
     lastSavedAt: null,
     snapshot: "",
-    syncTimer: null,
     version: 0,
-    conflictCount: 0,
   },
 };
 
 let elements = null;
-const SYNC_INTERVAL_MS = 15000;
-const clientSessionId = globalThis.crypto?.randomUUID?.() || `session-${Date.now()}`;
 const DEBUG_VALIDATION = new URLSearchParams(window.location.search).has("debug");
 
 function copy() {
@@ -423,155 +422,92 @@ function getSeedData() {
   return normalizeDashboardState(seedFactory(deepClone(createSeedData())));
 }
 
-function updateStorageTimestamp() {
-  state.storage.lastSavedAt = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(new Date());
+/* ── localStorage persistence layer ────────────────────────── */
+
+function saveToLocalStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEY, serializeDashboardState(state.data));
+    state.storage.lastSavedAt = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(new Date());
+    state.storage.source = "local";
+    state.storage.available = true;
+  } catch {
+    state.storage.available = false;
+  }
 }
 
-function applyStateSnapshot(nextData, { message = "", source = "shared" } = {}) {
+function loadFromLocalStorage() {
+  try {
+    const serialized = localStorage.getItem(STORAGE_KEY);
+    return parseDashboardState(serialized);
+  } catch {
+    return createSeedData();
+  }
+}
+
+function applyStateSnapshot(nextData, { message = "", source = "local" } = {}) {
   state.data = normalizeDashboardState(nextData);
   state.storage.snapshot = JSON.stringify(state.data);
-  state.storage.available = source !== "memory-only";
   state.storage.source = source;
-  state.storage.version = Number(nextData?._meta?.version || state.storage.version || 0);
   if (source !== "memory-only") {
-    updateStorageTimestamp();
+    state.storage.lastSavedAt = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(new Date());
   }
   if (message) {
     setNotice(message);
   }
 }
 
-function getClientActor() {
-  return `organic-board:${state.locale}:${clientSessionId}`;
-}
-
-async function apiRequest(path, { method = "GET", body } = {}) {
-  const startedAt = performance.now();
-  const response = await fetch(path, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-User": getClientActor(),
-      "X-Session-Id": clientSessionId,
-      "X-Known-State-Version": String(state.storage.version || 0),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const payload = await response.json().catch(() => ({}));
-  const apiResult = {
-    payload,
-    version: Number(response.headers.get("X-State-Version") || 0),
-    conflictDetected: response.headers.get("X-Conflict-Detected") === "1",
-    latencyMs: Number((performance.now() - startedAt).toFixed(2)),
-  };
-  if (!response.ok) {
-    const error = new Error(payload.error || `Request failed with status ${response.status}`);
-    error.api = apiResult;
-    throw error;
-  }
-
-  return apiResult;
-}
-
-async function refreshState({ silent = false, render = true } = {}) {
-  try {
-    const remoteState = await apiRequest("/state");
-    const snapshot = JSON.stringify(normalizeDashboardState(remoteState.payload));
-    const changed = snapshot !== state.storage.snapshot;
-    applyStateSnapshot(remoteState.payload, { source: "shared" });
-    if (DEBUG_VALIDATION) {
-      console.debug("[validation] state refresh", {
-        session: clientSessionId,
-        version: remoteState.version,
-        changed,
-        latencyMs: remoteState.latencyMs,
-      });
-    }
-    if (render && changed && !state.drawer.open) {
-      renderApp();
-    }
-    return remoteState.payload;
-  } catch (error) {
-    state.storage.available = false;
-    state.storage.source = "memory-only";
-    if (!silent) {
-      setNotice(copy().messages.notices.serverUnavailable || error.message);
-    }
-    if (!state.storage.snapshot) {
-      applyStateSnapshot(getSeedData(), { source: "memory-only" });
-    }
-    if (render) {
-      renderApp();
-    }
-    return state.data;
-  }
-}
-
 async function loadInitialDashboardState() {
-  return refreshState({ silent: false, render: false });
+  const data = loadFromLocalStorage();
+  applyStateSnapshot(data, { source: "local" });
 }
 
-async function mutateState(path, { method = "PATCH", body, message = "", recoveryContext = null } = {}) {
-  try {
-    const remoteState = await apiRequest(path, { method, body });
-    applyStateSnapshot(remoteState.payload, { message, source: "shared" });
-    if (remoteState.conflictDetected) {
-      state.storage.conflictCount += 1;
-      console.warn("[validation] conflict detected, last-write-wins applied", {
-        path,
-        session: clientSessionId,
-        version: remoteState.version,
-      });
-    } else if (DEBUG_VALIDATION) {
-      console.debug("[validation] mutation applied", {
-        path,
-        session: clientSessionId,
-        version: remoteState.version,
-        latencyMs: remoteState.latencyMs,
-      });
-    }
-    return remoteState.payload;
-  } catch (error) {
-    const recoveryGuidance = getRecoveryGuidance(error.message, recoveryContext || {});
-    if (recoveryGuidance) {
-      setGuidance(recoveryGuidance);
-    }
-    console.error("[validation] api mutation failed", {
-      path,
-      session: clientSessionId,
-      message: error.message,
-      latencyMs: error.api?.latencyMs || null,
-    });
-    setNotice(error.message);
-    renderApp();
-    throw error;
+async function mutateState(path, { body, message = "" } = {}) {
+  // Apply the mutation to in-memory state (body is the patch/entity)
+  // path pattern: /sectors/:id, /leads/:id, /opportunities/:id, /sectors, etc.
+  const segments = path.replace(/^\//, "").split("/");
+  const collection = segments[0];
+  const id = segments[1];
+
+  if (!id) {
+    // POST create — body is the new entity
+    if (collection === "sectors") state.data.sectors.push(body);
+    else if (collection === "leads") state.data.leads.push(body);
+    else if (collection === "opportunities") state.data.opportunities.push(body);
+  } else if (collection === "sectors") {
+    state.data.sectors = state.data.sectors.map((s) => s.id === id ? { ...s, ...body } : s);
+  } else if (collection === "leads") {
+    state.data.leads = state.data.leads.map((l) => l.id === id ? { ...l, ...body } : l);
+  } else if (collection === "opportunities") {
+    state.data.opportunities = state.data.opportunities.map((o) => o.id === id ? { ...o, ...body } : o);
+  } else if (path === "/state/restore-seed" || path === "/state/reset-shared") {
+    state.data = normalizeDashboardState(getSeedData());
   }
+
+  state.data = normalizeDashboardState(state.data);
+  saveToLocalStorage();
+  if (message) setNotice(message);
+  return state.data;
 }
 
 async function resetToSeed({ clearStorage = false } = {}) {
-  const endpoint = clearStorage ? "/state/reset-shared" : "/state/restore-seed";
+  state.data = normalizeDashboardState(getSeedData());
+  saveToLocalStorage();
   const message = clearStorage
-    ? copy().messages.notices.localCleared
-    : copy().messages.notices.seedRestored;
-  await mutateState(endpoint, { method: "POST", message });
+    ? (copy().messages.notices.localCleared || "State cleared.")
+    : (copy().messages.notices.seedRestored || "Seed restored.");
+  setNotice(message);
 }
 
 function startStateSync() {
-  if (state.storage.syncTimer) {
-    clearInterval(state.storage.syncTimer);
-  }
-
-  state.storage.syncTimer = window.setInterval(() => {
-    if (document.hidden) {
-      return;
-    }
-    refreshState({ silent: true, render: !state.drawer.open });
-  }, SYNC_INTERVAL_MS);
+  // No server — nothing to sync
 }
 
 function formatDate(dateValue) {
@@ -937,6 +873,7 @@ function renderNav() {
 }
 
 function renderSidebarWeeklyFocus() {
+  if (!elements.sidebarWeeklyFocus) return;
   const activeSector = getSectorById(state.data.weeklyFocus.active_sector_id);
   elements.sidebarWeeklyFocus.innerHTML = `
     <div class="focus-chip" dir="${inferTextDirection(activeSector?.sector_name)}">${
@@ -946,6 +883,7 @@ function renderSidebarWeeklyFocus() {
     <p class="sidebar-note">${state.data.weeklyFocus.weekly_target}</p>
   `;
 }
+
 
 function renderFilters() {
   const sourceOptions = getAvailableSources()
@@ -1059,9 +997,7 @@ function setScreenActions(html) {
   const storageLabel = state.storage.available
     ? state.storage.lastSavedAt
       ? copy().chrome.storage.savedLocally(state.storage.lastSavedAt)
-      : state.storage.source === "shared"
-        ? copy().chrome.storage.localLoaded
-        : copy().chrome.storage.seedMode
+      : copy().chrome.storage.localLoaded
     : copy().chrome.storage.memoryOnly;
 
   elements.screenActions.innerHTML = `

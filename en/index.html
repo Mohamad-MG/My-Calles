@@ -6,35 +6,8 @@
     <title>MyCalls Operational Dashboard</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="../styles.css" />
-    <script>
-      window.__MYCALLS_BOOT__ = { started: false, ready: false, error: null };
-      window.__MYCALLS_PAGE__ = {
-        locale: "en",
-        fallbackTitle: "MyCalls Dashboard could not start",
-        fallbackMessage:
-          "This dashboard must run through the shared MyCalls server, not file://. Open it through the Node server at http://localhost:4173/en/.",
-        fallbackPrefix: "Dashboard boot failed. Run it through the shared MyCalls server.",
-        localServerCommand: "npm start",
-        localServerHint: "Then open http://localhost:4173/en/",
-      };
-      document.documentElement.classList.add("app-pending");
-    </script>
   </head>
   <body>
-    <div class="app-fallback hidden" id="app-fallback">
-      <div class="fallback-card">
-        <p class="eyebrow">Runtime Check</p>
-        <h1 id="fallback-title">MyCalls Dashboard could not start</h1>
-        <p id="fallback-message">
-          This dashboard must run through the shared MyCalls server, not file://.
-        </p>
-        <div class="fallback-actions">
-          <code id="fallback-command">npm start</code>
-          <span id="fallback-hint">Then open http://localhost:4173/en/</span>
-        </div>
-      </div>
-    </div>
-
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -46,8 +19,6 @@
         </div>
 
         <nav class="nav" id="main-nav"></nav>
-
-
       </aside>
 
       <main class="main">
@@ -82,49 +53,17 @@
       <div class="drawer-body" id="drawer-body"></div>
     </aside>
 
-    <script>
-      (async function bootMyCalls() {
-        const page = window.__MYCALLS_PAGE__;
-        const fallback = document.getElementById("app-fallback");
-        const fallbackTitle = document.getElementById("fallback-title");
-        const fallbackMessage = document.getElementById("fallback-message");
-        const fallbackCommand = document.getElementById("fallback-command");
-        const fallbackHint = document.getElementById("fallback-hint");
-
-        function showFallback(message) {
-          window.__MYCALLS_BOOT__.error = message;
-          document.documentElement.classList.remove("app-pending");
-          document.documentElement.classList.add("app-failed");
-          fallback.classList.remove("hidden");
-          fallbackTitle.textContent = page.fallbackTitle;
-          fallbackMessage.textContent = message;
-          fallbackCommand.textContent = page.localServerCommand;
-          fallbackCommand.classList.toggle("hidden", !page.localServerCommand);
-          fallbackHint.textContent = page.localServerHint;
-        }
-
-        if (window.location.protocol === "file:") {
-          showFallback(page.fallbackMessage);
-          return;
-        }
-
-        try {
-          window.__MYCALLS_BOOT__.started = true;
-          const [{ getLocaleConfig }, app] = await Promise.all([
-            import("../i18n.mjs"),
-            import("../app.js"),
-          ]);
-          await app.bootstrapApp({
-            locale: page.locale,
-            localeConfig: getLocaleConfig(page.locale),
-          });
-          window.__MYCALLS_BOOT__.ready = true;
-          document.documentElement.classList.remove("app-pending");
-          document.documentElement.classList.add("app-ready");
-        } catch (error) {
-          showFallback(`${page.fallbackPrefix} Technical detail: ${error.message}`);
-        }
-      })();
+    <script type="module">
+      import { getLocaleConfig } from "../i18n.mjs";
+      import * as app from "../app.js";
+      try {
+        await app.bootstrapApp({
+          locale: "en",
+          localeConfig: getLocaleConfig("en"),
+        });
+      } catch (error) {
+        document.body.innerHTML = `<div style="padding:32px;font-family:sans-serif"><h1>Error</h1><p>${error.message}</p></div>`;
+      }
     </script>
   </body>
 </html>

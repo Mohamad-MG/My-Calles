@@ -123,9 +123,9 @@ ul, ol   { list-style: none; }
 .hidden { display: none !important; }
 
 /* ── App Loading States ───────────────────────────────────────── */
-html.app-pending .app-shell { opacity: 0; pointer-events: none; }
-html.app-ready   .app-shell { opacity: 1; transition: opacity 0.22s ease; }
-html.app-failed  .app-shell { display: none; }
+.app-shell { opacity: 0; }
+html.app-ready .app-shell { opacity: 1; transition: opacity 0.28s ease; }
+
 
 /* ── App Shell — two-column grid ─────────────────────────────── */
 .app-shell {
