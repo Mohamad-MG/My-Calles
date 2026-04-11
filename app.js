@@ -724,7 +724,161 @@ function formatAgentMission(agent, metrics) {
     : `${metrics.discoveries} discoveries / ${formatCurrency(metrics.pipelineValue)} pipeline`;
 }
 
+function renderOrganicLeadHuntingBoard() {
+  const activeSector = getSectorById(state.data.weeklyFocus.active_sector_id) || state.data.sectors[0];
+  const activeSectorId = activeSector?.id;
+  
+  const sectorLeads = state.data.leads.filter(l => l.sector_id === activeSectorId);
+  const qualifiedLeads = sectorLeads.filter(l => l.current_stage === "Qualified" || l.current_stage === "Meeting Booked" || l.current_stage === "Handoff Sent");
+  
+  const sectorOpps = state.data.opportunities.filter(o => o.sector_id === activeSectorId);
+  const opportunities = sectorOpps.filter(o => o.current_stage !== "Won" && o.current_stage !== "Lost");
+  
+  const definedChannels = getChannelOptions();
+  const allChannels = definedChannels.length > 0 ? definedChannels : ["Email", "WhatsApp", "LinkedIn", "X/Twitter", "Google Inbound", "Competitor"];
+  
+  const activeChannelBlocks = [];
+  const inactiveChannels = [];
+
+  allChannels.forEach(channelKey => {
+      const leadsInChannel = sectorLeads.filter(l => l.channel === channelKey);
+      const oppsInChannel = sectorOpps.filter(o => {
+          const originLead = getLeadById(o.origin_lead_id);
+          return originLead?.channel === channelKey;
+      });
+      
+      if (leadsInChannel.length === 0 && oppsInChannel.length === 0) {
+          inactiveChannels.push(channelKey);
+      } else {
+          const totalSent = leadsInChannel.length; 
+          const replies = leadsInChannel.filter(l => l.current_stage !== "Targeted" && l.current_stage !== "New").length;
+          
+          let queueItemsHtml = "";
+          const activeQueueLeads = leadsInChannel.filter(l => !["Qualified", "Meeting Booked", "Handoff Sent", "Disqualified", "No Response"].includes(l.current_stage));
+          
+          if (activeQueueLeads.length === 0) {
+              queueItemsHtml = `<div class="zero-state-placeholder">No pending actions</div>`;
+          } else {
+              queueItemsHtml = activeQueueLeads.map(l => {
+                  let priority = "wait"; 
+                  let label = "WAIT";
+                  let actionText = l.next_step || l.company_name;
+                  
+                  if (["Targeted", "New"].includes(l.current_stage)) {
+                      priority = "now"; label = "NOW"; actionText = "Send opener: " + l.company_name;
+                  } else if (l.current_stage === "Replied" || (l.next_step && l.next_step.toLowerCase().includes("qualify"))) {
+                      priority = "now"; label = "NOW"; actionText = "Qualify " + l.company_name;
+                  } else if (["Engaged", "Negotiation"].includes(l.current_stage)) {
+                      priority = "next"; label = "NEXT"; actionText = l.next_step || ("Follow up " + l.company_name);
+                  }
+                  
+                  return `<div class="action-item"><span class="badge ${priority}">${label}</span> ${compactText(actionText, 35)}</div>`;
+              }).join("");
+          }
+
+          const hasBottleneck = leadsInChannel.some(l => l.current_stage === "Delayed");
+          const bottleneckHtml = hasBottleneck ? 
+             `<div class="bottleneck">🔴 Attention Needed</div>` : 
+             `<div class="bottleneck ok">🟢 Healthy</div>`;
+             
+          activeChannelBlocks.push(`
+            <div class="channel-block">
+              <div class="channel-head">${displayChannel(channelKey)} <span style="font-size: 0.8rem; font-weight: normal; color: var(--muted);">(${totalSent} leads)</span></div>
+              <div class="channel-metrics meta-row">${totalSent} targeted | ${replies} engaged</div>
+              ${bottleneckHtml}
+              <div class="action-queue">${queueItemsHtml}</div>
+            </div>
+          `);
+      }
+  });
+
+  const rawSignalsCount = sectorLeads.length;
+  const highIntentCount = qualifiedLeads.length + opportunities.length;
+
+  setScreenActions("");
+
+  return `
+    <div class="org-hunting-board">
+      <div class="command-strip">
+        <div class="target-block">
+          <p class="eyebrow">Today Target &mdash; ${activeSector?.sector_name || "Any"} (Active Sources Only)</p>
+          <div class="target-metrics">
+            <span><strong>${rawSignalsCount}</strong> Signals</span>
+            <span><strong>${highIntentCount}</strong> High Intent</span>
+            <span><strong>${qualifiedLeads.length}</strong> Qual</span>
+          </div>
+        </div>
+        <div class="sector-control">
+          <p class="eyebrow">Sector Focus</p>
+          <div class="sector-toggles" style="display: flex; gap: 8px;">
+            ${state.data.sectors.map(s => `
+              <button type="button" class="focus-chip ${s.id === activeSectorId ? 'active' : ''}" data-set-active="${s.id}" style="border:none; cursor:pointer;" title="${s.sector_name}">
+                ${s.sector_name}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="ops-layout">
+        <aside class="left-rail">
+          <div class="rail-section">
+            <h4 class="rail-header">▼ Signal Triage</h4>
+            <div class="triage-box">
+               <div style="margin-bottom: 6px;"><span class="pill">${rawSignalsCount}</span> Raw Signals</div>
+              <div style="margin-bottom: 12px;"><span class="pill danger">🔥 ${highIntentCount}</span> High Intent</div>
+              <button class="ghost-button tight">Review High Intent</button>
+            </div>
+          </div>
+          <div class="rail-section">
+            <h4 class="rail-header">▼ Leads Qualified <span class="pill">${qualifiedLeads.length}</span></h4>
+            <div class="rail-list">
+              ${qualifiedLeads.length ? qualifiedLeads.map(l => `
+                <div class="rail-item">
+                  <strong>${l.company_name}</strong>
+                  <div class="meta-row">↳ ${displayChannel(l.channel) || "Direct"}</div>
+                </div>
+              `).join('') : '<div class="zero-state-placeholder" style="min-height: 40px; border:none;">None</div>'}
+            </div>
+          </div>
+          <div class="rail-section">
+            <h4 class="rail-header">▼ Opportunities <span class="pill">${opportunities.length}</span></h4>
+            <div class="rail-list">
+              ${opportunities.length ? opportunities.map(o => {
+                const originLead = getLeadById(o.origin_lead_id);
+                return `
+                <div class="rail-item">
+                  <strong>${o.company_name}</strong>
+                  <div class="meta-row">↳ ${displayChannel(originLead?.channel) || "Direct"}</div>
+                </div>
+                `
+              }).join('') : '<div class="zero-state-placeholder" style="min-height: 40px; border:none;">None</div>'}
+            </div>
+          </div>
+        </aside>
+
+        <section class="main-execution-grid">
+          <div class="channel-blocks">
+            ${activeChannelBlocks.length ? activeChannelBlocks.join('') : '<div class="zero-state-placeholder" style="grid-column: 1 / -1; width: 100%;">No active channels heavily used in this sector.</div>'}
+          </div>
+          
+          <details class="inactive-tray">
+            <summary>▼ INACTIVE / UNUSED SOURCES (${activeSector?.sector_name || "Any"})</summary>
+            <div class="tray-content" style="flex-wrap: wrap;">
+              ${inactiveChannels.map(ch => `<span class="pill">${displayChannel(ch)}</span>`).join('')}
+            </div>
+          </details>
+        </section>
+      </div>
+    </div>
+  `;
+}
+
 function renderExecutiveScreen() {
+  return renderOrganicLeadHuntingBoard();
+}
+
+function oldRenderExecutiveScreen() {
   const today = todayDate();
   const metrics = getMetrics(state.data, today);
   const queue = getTodayQueue(state.data, today);
