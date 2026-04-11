@@ -18,7 +18,9 @@ const enLocale = {
   },
   chrome: {
     screens: {
-      sources: "Source Operations Board",
+      analysis: "Analysis",
+      "all-leads": "All Leads",
+      sources: "Sources",
     },
     sidebar: {
       weeklyFocusLabel: "Weekly Focus",

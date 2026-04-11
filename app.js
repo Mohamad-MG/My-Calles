@@ -19,8 +19,9 @@ import {
   validateOpportunityTransition,
 } from "./logic.mjs";
 
-const SCREENS = [
-  { key: "sources" },
+const STATIC_SCREENS = [
+  { key: "analysis" },
+  { key: "all-leads" },
 ];
 
 const FALLBACK_COPY = {
@@ -36,7 +37,9 @@ const FALLBACK_COPY = {
   },
   chrome: {
     screens: {
-      sources: "Source Operations Board",
+      analysis: "Analysis",
+      "all-leads": "All Leads",
+      sources: "Sources",
     },
     sidebar: {
       weeklyFocusLabel: "Weekly Focus",
@@ -129,13 +132,15 @@ const state = {
   locale: "en",
   copy: FALLBACK_COPY,
   data: createSeedData(),
-  activeScreen: "sources",
+  activeScreen: "analysis",
   activeSource: "all",
   filters: {
     sector: "all",
     stage: "all",
     urgency: "all",
     overdue: "all",
+    source: "all",
+    focus: "all",
   },
   drawer: {
     open: false,
@@ -654,6 +659,24 @@ function getAvailableSources() {
   );
 }
 
+function getPrimaryScreens() {
+  return [
+    ...STATIC_SCREENS,
+    ...ensureActiveSource().map((source) => ({
+      key: `source:${source}`,
+      source,
+    })),
+  ];
+}
+
+function isSourceScreen(screen = state.activeScreen) {
+  return screen.startsWith("source:");
+}
+
+function getScreenSource(screen = state.activeScreen) {
+  return isSourceScreen(screen) ? screen.replace(/^source:/, "") : "";
+}
+
 function ensureActiveSource() {
   const sources = getAvailableSources();
   if (!sources.length) {
@@ -667,6 +690,11 @@ function ensureActiveSource() {
 }
 
 function getActiveSource() {
+  const screenSource = getScreenSource();
+  if (screenSource) {
+    state.activeSource = screenSource;
+    return screenSource;
+  }
   ensureActiveSource();
   return state.activeSource;
 }
@@ -771,6 +799,101 @@ function getFilteredSectors() {
   });
 }
 
+function getAllLeads() {
+  return state.data.leads.filter((lead) => {
+    if (!leadMatchesCommonFilters(lead)) {
+      return false;
+    }
+
+    if (state.filters.source !== "all" && lead.channel !== state.filters.source) {
+      return false;
+    }
+
+    const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
+    if (state.filters.focus === "needs-reply" && workflowBucket !== "Needs Reply") {
+      return false;
+    }
+    if (state.filters.focus === "ready-handoff" && workflowBucket !== "Ready for Handoff") {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function getAnalysisMetrics() {
+  const today = todayDate();
+  const leads = state.data.leads;
+  const openOpportunities = state.data.opportunities.filter((opportunity) => {
+    const stage = getComputedOpportunityStage(opportunity, today);
+    return !["Won", "Lost"].includes(stage);
+  });
+
+  return {
+    newToday: leads.filter((lead) => lead.created_at === today).length,
+    needsContact: leads.filter((lead) => {
+      const bucket = getLeadWorkflowBucket(lead, state.data.opportunities);
+      return ["New", "Needs Extraction", "Needs Reply"].includes(bucket);
+    }).length,
+    readyForHandoff: leads.filter(
+      (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Ready for Handoff",
+    ).length,
+    openOpportunities: openOpportunities.length,
+  };
+}
+
+function getSourcePriorityRows() {
+  return ensureActiveSource()
+    .map((source) => {
+      const metrics = getSourceMetrics(source);
+      return {
+        source,
+        metrics,
+        score: metrics.readyForHandoff * 3 + metrics.needsReply * 2 + metrics.leads,
+      };
+    })
+    .sort((left, right) => right.score - left.score || right.metrics.leads - left.metrics.leads);
+}
+
+function getTodayActionQueue(limit = 6) {
+  const today = todayDate();
+  return state.data.leads
+    .map((lead) => {
+      const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
+      const computedStage = getComputedLeadStage(lead, today);
+      let priority = 0;
+      if (workflowBucket === "Ready for Handoff") priority += 5;
+      if (workflowBucket === "Needs Reply") priority += 4;
+      if (workflowBucket === "Needs Qualification") priority += 3;
+      if (computedStage === "Delayed") priority += 3;
+      if (lead.next_step_date && lead.next_step_date <= today) priority += 2;
+      if (!lead.next_step) priority += 1;
+      return { lead, workflowBucket, computedStage, priority };
+    })
+    .filter((item) => item.priority > 0)
+    .sort((left, right) => right.priority - left.priority)
+    .slice(0, limit);
+}
+
+function getDropoffRows() {
+  const today = todayDate();
+  return getSourcePriorityRows()
+    .map(({ source, metrics }) => {
+      const stalledLeads = getSourceLeads(source).filter((lead) => {
+        const computedStage = getComputedLeadStage(lead, today);
+        return computedStage === "Delayed" || !lead.next_step;
+      }).length;
+      return {
+        source,
+        stalledLeads,
+        readyForHandoff: metrics.readyForHandoff,
+        needsReply: metrics.needsReply,
+      };
+    })
+    .filter((row) => row.stalledLeads || row.readyForHandoff || row.needsReply)
+    .sort((left, right) => right.stalledLeads - left.stalledLeads || right.readyForHandoff - left.readyForHandoff);
+}
+
 function setDrawer(drawerState) {
   state.drawer = { ...state.drawer, ...drawerState };
   renderDrawer();
@@ -790,14 +913,14 @@ function closeDrawer() {
 }
 
 function renderNav() {
-  elements.nav.innerHTML = SCREENS.map(
+  elements.nav.innerHTML = getPrimaryScreens().map(
     (screen) => `
       <button
         class="nav-link ${screen.key === state.activeScreen ? "active" : ""}"
         data-screen="${screen.key}"
         type="button"
       >
-        ${copy().chrome.screens[screen.key] || screen.key}
+        ${screen.source ? displayChannel(screen.source) : copy().chrome.screens[screen.key] || screen.key}
       </button>
     `,
   ).join("");
@@ -805,6 +928,9 @@ function renderNav() {
   elements.nav.querySelectorAll("[data-screen]").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeScreen = button.dataset.screen;
+      if (isSourceScreen(state.activeScreen)) {
+        state.activeSource = getScreenSource(state.activeScreen);
+      }
       renderApp();
     });
   });
@@ -822,46 +948,103 @@ function renderSidebarWeeklyFocus() {
 }
 
 function renderFilters() {
+  const sourceOptions = getAvailableSources()
+    .map((source) => `<option value="${source}">${displayChannel(source)}</option>`)
+    .join("");
   const sectorOptions = state.data.sectors
     .map((sector) => `<option value="${sector.id}">${sector.sector_name}</option>`)
     .join("");
   const stageOptions = [...new Set([...LEAD_STAGES, ...OPPORTUNITY_STAGES, "Active", "Testing", "Paused", "Rejected"])]
     .map((stage) => `<option value="${stage}">${displayStage(stage)}</option>`)
     .join("");
+  const focusLabel = copy().meta.lang === "ar" ? "التركيز" : "Focus";
+  const needsReplyLabel = copy().meta.lang === "ar" ? "يحتاج رد" : "Needs Reply";
+  const readyLabel = copy().meta.lang === "ar" ? "جاهز للتحويل" : "Ready for Handoff";
 
-  elements.filters.innerHTML = `
-    <label>
-      <span>${copy().chrome.filters.sector}</span>
-      <select data-filter="sector">
-        <option value="all">${copy().chrome.filters.all}</option>
-        ${sectorOptions}
-      </select>
-    </label>
-    <label>
-      <span>${copy().chrome.filters.stage}</span>
-      <select data-filter="stage">
-        <option value="all">${copy().chrome.filters.all}</option>
-        ${stageOptions}
-      </select>
-    </label>
-    <label>
-      <span>${copy().chrome.filters.urgency}</span>
-      <select data-filter="urgency">
-        <option value="all">${copy().chrome.filters.all}</option>
-        <option value="High">${displayUrgency("High")}</option>
-        <option value="Medium">${displayUrgency("Medium")}</option>
-        <option value="Low">${displayUrgency("Low")}</option>
-      </select>
-    </label>
-    <label>
-      <span>${copy().chrome.filters.overdue}</span>
-      <select data-filter="overdue">
-        <option value="all">${copy().chrome.filters.all}</option>
-        <option value="yes">${copy().chrome.filters.yes}</option>
-        <option value="no">${copy().chrome.filters.no}</option>
-      </select>
-    </label>
-  `;
+  if (state.activeScreen === "analysis") {
+    elements.filters.innerHTML = `
+      <label>
+        <span>${copy().chrome.filters.sector}</span>
+        <select data-filter="sector">
+          <option value="all">${copy().chrome.filters.all}</option>
+          ${sectorOptions}
+        </select>
+      </label>
+      <label>
+        <span>${copy().chrome.filters.overdue}</span>
+        <select data-filter="overdue">
+          <option value="all">${copy().chrome.filters.all}</option>
+          <option value="yes">${copy().chrome.filters.yes}</option>
+          <option value="no">${copy().chrome.filters.no}</option>
+        </select>
+      </label>
+    `;
+  } else if (state.activeScreen === "all-leads") {
+    elements.filters.innerHTML = `
+      <label>
+        <span>${getFieldLabel("source", "Source")}</span>
+        <select data-filter="source">
+          <option value="all">${copy().chrome.filters.all}</option>
+          ${sourceOptions}
+        </select>
+      </label>
+      <label>
+        <span>${copy().chrome.filters.stage}</span>
+        <select data-filter="stage">
+          <option value="all">${copy().chrome.filters.all}</option>
+          ${stageOptions}
+        </select>
+      </label>
+      <label>
+        <span>${copy().chrome.filters.sector}</span>
+        <select data-filter="sector">
+          <option value="all">${copy().chrome.filters.all}</option>
+          ${sectorOptions}
+        </select>
+      </label>
+      <label>
+        <span>${copy().chrome.filters.overdue}</span>
+        <select data-filter="overdue">
+          <option value="all">${copy().chrome.filters.all}</option>
+          <option value="yes">${copy().chrome.filters.yes}</option>
+          <option value="no">${copy().chrome.filters.no}</option>
+        </select>
+      </label>
+      <label>
+        <span>${focusLabel}</span>
+        <select data-filter="focus">
+          <option value="all">${copy().chrome.filters.all}</option>
+          <option value="needs-reply">${needsReplyLabel}</option>
+          <option value="ready-handoff">${readyLabel}</option>
+        </select>
+      </label>
+    `;
+  } else {
+    elements.filters.innerHTML = `
+      <label>
+        <span>${copy().chrome.filters.sector}</span>
+        <select data-filter="sector">
+          <option value="all">${copy().chrome.filters.all}</option>
+          ${sectorOptions}
+        </select>
+      </label>
+      <label>
+        <span>${copy().chrome.filters.stage}</span>
+        <select data-filter="stage">
+          <option value="all">${copy().chrome.filters.all}</option>
+          ${stageOptions}
+        </select>
+      </label>
+      <label>
+        <span>${copy().chrome.filters.overdue}</span>
+        <select data-filter="overdue">
+          <option value="all">${copy().chrome.filters.all}</option>
+          <option value="yes">${copy().chrome.filters.yes}</option>
+          <option value="no">${copy().chrome.filters.no}</option>
+        </select>
+      </label>
+    `;
+  }
 
   elements.filters.querySelectorAll("[data-filter]").forEach((input) => {
     input.value = state.filters[input.dataset.filter];
@@ -1005,26 +1188,125 @@ function getSourceTabSummary(source) {
     : `${metrics.leads} leads • ${metrics.opportunities} opportunities`;
 }
 
-function renderSourceTabs() {
-  const sources = ensureActiveSource();
+function getSourcePlaybook(source) {
+  const isArabic = copy().meta.lang === "ar";
+  const defaults = isArabic
+    ? {
+        whereToLook: ["ابحث في المحادثات النشطة", "راجع التعليقات أو الأسئلة المتكررة", "التقط أي إشارة ألم أو طلب متابعة"],
+        signals: ["طلب توضيح أو تسعير", "شكوى من بطء أو فوضى", "وجود مدير تشغيل أو مالك في الحوار"],
+        tricks: ["سجل lead بسرعة قبل ضياع الإشارة", "اكتب pain signal بجملة واحدة", "أضف next step واضحة من أول مرة"],
+        qualifies: "جهة فيها ألم واضح، وقناة تواصل مباشرة، وخطوة تالية قابلة للتنفيذ.",
+      }
+    : {
+        whereToLook: ["Check active conversations", "Review repeated questions and comments", "Capture any pain signal or follow-up request"],
+        signals: ["Pricing or scope question", "Complaint about delay or chaos", "Ops manager or owner present in the thread"],
+        tricks: ["Capture the lead before the signal disappears", "Write the pain signal in one sentence", "Set the next step immediately"],
+        qualifies: "A usable lead has clear pain, a direct contact path, and a practical next step.",
+      };
 
+  const presets = {
+    WhatsApp: isArabic
+      ? {
+          whereToLook: ["محادثات العملاء السابقة", "الرسائل التي توقفت بعد استفسار", "الإحالات من عملاء حاليين"],
+          signals: ["استفسار عن الحجز أو المتابعة", "شكوى من missed calls", "احتياج سكرتارية أو متابعة خارج الدوام"],
+          tricks: ["ابدأ من المحادثات الأحدث", "استخرج lead من كل استفسار ناقص", "دوّن اسم النشاط والدور فورًا"],
+          qualifies: "الشركة لديها ضغط مكالمات أو متابعة، ويوجد شخص واضح يمكن الرجوع إليه.",
+        }
+      : {
+          whereToLook: ["Recent client chats", "Threads that stopped after a question", "Referrals from current customers"],
+          signals: ["Booking or follow-up question", "Complaint about missed calls", "Need for secretary or after-hours follow-up"],
+          tricks: ["Start with the freshest chats", "Turn every incomplete inquiry into a lead", "Capture company and role immediately"],
+          qualifies: "The business has follow-up pressure and a clear person to continue with.",
+        },
+    Call: isArabic
+      ? {
+          whereToLook: ["سجل المكالمات الفائتة", "المكالمات المتكررة لنفس الرقم", "المكالمات التي انتهت بدون متابعة"],
+          signals: ["مكالمة فائتة أكثر من مرة", "سؤال سريع عن الخدمة", "عدم وجود سكرتارية أو رد ثابت"],
+          tricks: ["رتب الأرقام حسب التكرار", "سجّل pain signal من أول مكالمة", "حدد هل تحتاج رد أم تأهيل"],
+          qualifies: "هناك intent واضح من المتصل وسبب عملي يجعل خدمة My Calls ذات معنى.",
+        }
+      : {
+          whereToLook: ["Missed-call logs", "Repeated calls from the same number", "Calls that ended without follow-up"],
+          signals: ["Repeated missed calls", "Fast service inquiry", "No consistent front-desk handling"],
+          tricks: ["Sort numbers by repetition", "Capture the pain signal from the first call", "Decide if it needs reply or qualification"],
+          qualifies: "The caller shows intent and there is an operational reason for My Calls to help.",
+        },
+    LinkedIn: isArabic
+      ? {
+          whereToLook: ["منشورات التشغيل والمبيعات", "تعليقات أصحاب الشركات", "صفحات الشركات التي يظهر عليها بطء الرد"],
+          signals: ["ذكر فقدان العملاء", "ضغط على الفريق", "طلب نظام متابعة أو تنظيم مكالمات"],
+          tricks: ["ابدأ بأصحاب القرار الظاهرين", "اسحب الإشارة لا الاسم فقط", "اكتب next step مخصصة للمنصة"],
+          qualifies: "يوجد pain تشغيلي واضح وشخص مهني مناسب للتواصل.",
+        }
+      : {
+          whereToLook: ["Ops and sales posts", "Founder and manager comments", "Company pages showing response gaps"],
+          signals: ["Mentions lost customers", "Team overload", "Need for follow-up or call handling system"],
+          tricks: ["Start with visible decision-makers", "Capture the signal, not just the name", "Write a source-specific next step"],
+          qualifies: "There is clear operational pain and a relevant professional contact.",
+        },
+  };
+
+  return presets[source] || defaults;
+}
+
+function renderBullets(items) {
+  return `<ul class="playbook-list">${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+}
+
+function renderSourceHuntPanel(source) {
+  const playbook = getSourcePlaybook(source);
   return `
-    <div class="source-tabs">
-      ${sources
-        .map(
-          (source) => `
-            <button
-              class="source-tab ${source === getActiveSource() ? "active" : ""}"
-              type="button"
-              data-source-tab="${source}"
-            >
-              <strong>${displayChannel(source)}</strong>
-              <span>${getSourceTabSummary(source)}</span>
-            </button>
-          `,
-        )
-        .join("")}
-    </div>
+    <article class="panel source-panel hunt-panel">
+      <div class="panel-head">
+        <div>
+          <p class="panel-label">${copy().meta.lang === "ar" ? "الالتقاط" : "Hunt"}</p>
+          <h3>${copy().meta.lang === "ar" ? `كيف نبحث داخل ${displayChannel(source)}` : `How to hunt in ${displayChannel(source)}`}</h3>
+        </div>
+        <button class="primary-button tight" type="button" data-action="new-lead">${copy().chrome.buttons.newLead}</button>
+      </div>
+      <div class="playbook-grid">
+        <div>
+          <h4>${copy().meta.lang === "ar" ? "أين نبحث" : "Where to look"}</h4>
+          ${renderBullets(playbook.whereToLook)}
+        </div>
+        <div>
+          <h4>${copy().meta.lang === "ar" ? "الإشارات المهمة" : "Lead signals"}</h4>
+          ${renderBullets(playbook.signals)}
+        </div>
+        <div>
+          <h4>${copy().meta.lang === "ar" ? "حيل سريعة" : "Quick tricks"}</h4>
+          ${renderBullets(playbook.tricks)}
+        </div>
+      </div>
+      <p class="card-summary"><strong>${copy().meta.lang === "ar" ? "ما الذي يجعلها lead صالحة؟" : "What qualifies as usable?"}</strong> ${playbook.qualifies}</p>
+    </article>
+  `;
+}
+
+function renderSourceSnapshot(source) {
+  const metrics = getSourceMetrics(source);
+  return `
+    <article class="panel source-panel snapshot-panel">
+      <div class="panel-head">
+        <div>
+          <p class="panel-label">${copy().meta.lang === "ar" ? "ملخص القناة" : "Captured / Snapshot"}</p>
+          <h3>${displayChannel(source)}</h3>
+        </div>
+      </div>
+      <div class="detail-grid tight">
+        <div><span>${copy().meta.lang === "ar" ? "إجمالي اللِيدز" : "Total leads"}</span><strong>${metrics.leads}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "تحتاج رد" : "Needs reply"}</span><strong>${metrics.needsReply}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for handoff"}</span><strong>${metrics.readyForHandoff}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "فرص ناتجة" : "Progressed opportunities"}</span><strong>${metrics.opportunities}</strong></div>
+      </div>
+      <p class="card-summary">
+        ${
+          copy().meta.lang === "ar"
+            ? "هذا الملخص يوضح أين تقف هذه القناة الآن: ما تم التقاطه، وما يحتاج ردًا، وما أصبح جاهزًا للانتقال إلى فرصة."
+            : "This snapshot shows what the source has captured, what still needs reply, and what is ready to move into opportunities."
+        }
+      </p>
+    </article>
   `;
 }
 
@@ -1218,39 +1500,222 @@ function renderSourceProgression(source) {
   `;
 }
 
-function renderSourcesScreen() {
-  const sources = ensureActiveSource();
-  const activeSource = getActiveSource();
+function renderMetricCard(label, value, note = "") {
+  return `
+    <article class="stat-card">
+      <span>${label}</span>
+      <strong>${value}</strong>
+      ${note ? `<small>${note}</small>` : ""}
+    </article>
+  `;
+}
+
+function renderAnalysisScreen() {
+  const metrics = getAnalysisMetrics();
+  const sourceRows = getSourcePriorityRows();
+  const actionQueue = getTodayActionQueue();
+  const dropoffRows = getDropoffRows();
 
   setScreenActions("");
 
-  if (!sources.length) {
+  return `
+    <section class="analysis-board">
+      <section class="stat-strip source-stat-strip">
+        ${renderMetricCard(copy().meta.lang === "ar" ? "جهات جديدة اليوم" : "New leads today", metrics.newToday)}
+        ${renderMetricCard(copy().meta.lang === "ar" ? "تحتاج تواصل الآن" : "Need contact now", metrics.needsContact)}
+        ${renderMetricCard(copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for handoff", metrics.readyForHandoff)}
+        ${renderMetricCard(copy().meta.lang === "ar" ? "فرص مفتوحة" : "Open opportunities", metrics.openOpportunities)}
+      </section>
+
+      <section class="analysis-grid">
+        <article class="panel analysis-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "أين نبدأ" : "Where to Hunt Today"}</p>
+              <h3>${copy().meta.lang === "ar" ? "أولوية القنوات اليوم" : "Source priority today"}</h3>
+            </div>
+          </div>
+          <div class="rail-list">
+            ${sourceRows
+              .map(
+                ({ source, metrics: sourceMetrics }) => `
+                  <button class="rail-item source-priority-row" type="button" data-source-tab="${source}">
+                    <div>
+                      <strong>${displayChannel(source)}</strong>
+                      <div class="meta-row">
+                        ${
+                          copy().meta.lang === "ar"
+                            ? `${sourceMetrics.leads} جهة • ${sourceMetrics.needsReply} تحتاج رد • ${sourceMetrics.opportunities} فرصة`
+                            : `${sourceMetrics.leads} leads • ${sourceMetrics.needsReply} need reply • ${sourceMetrics.opportunities} opportunities`
+                        }
+                      </div>
+                    </div>
+                    <span class="pill">${copy().meta.lang === "ar" ? `${sourceMetrics.readyForHandoff} جاهزة` : `${sourceMetrics.readyForHandoff} ready`}</span>
+                  </button>
+                `,
+              )
+              .join("")}
+          </div>
+        </article>
+
+        <article class="panel analysis-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "حركة اليوم" : "Today Action Queue"}</p>
+              <h3>${copy().meta.lang === "ar" ? "ما الذي يحتاج حركة الآن" : "What should move now"}</h3>
+            </div>
+          </div>
+          <div class="rail-list">
+            ${
+              actionQueue.length
+                ? actionQueue
+                    .map(
+                      ({ lead, workflowBucket, computedStage }) => `
+                        <button class="rail-item analysis-action-row" type="button" data-open-record="lead:${lead.id}">
+                          <div>
+                            <strong>${lead.company_name}</strong>
+                            <div class="meta-row">${displayChannel(lead.channel)} • ${displayWorkflowBucket(workflowBucket)} • ${displayStage(computedStage)}</div>
+                            <div class="meta-row">${compactText(lead.next_step || getValueLabel("noImmediateNextStep", "No immediate next step"), 80)}</div>
+                          </div>
+                          <span class="pill">${shortDate(lead.next_step_date)}</span>
+                        </button>
+                      `,
+                    )
+                    .join("")
+                : renderEmptyState()
+            }
+          </div>
+        </article>
+
+        <article class="panel analysis-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "نقاط الانتباه" : "Drop-Off / Attention"}</p>
+              <h3>${copy().meta.lang === "ar" ? "أماكن التوقف الظاهرة" : "Where progress is stalling"}</h3>
+            </div>
+          </div>
+          <div class="rail-list">
+            ${
+              dropoffRows.length
+                ? dropoffRows
+                    .map(
+                      (row) => `
+                        <button class="rail-item source-priority-row" type="button" data-source-tab="${row.source}">
+                          <div>
+                            <strong>${displayChannel(row.source)}</strong>
+                            <div class="meta-row">
+                              ${
+                                copy().meta.lang === "ar"
+                                  ? `${row.stalledLeads} متعطلة • ${row.needsReply} تحتاج رد`
+                                  : `${row.stalledLeads} stalled • ${row.needsReply} need reply`
+                              }
+                            </div>
+                          </div>
+                          <span class="pill">${copy().meta.lang === "ar" ? `${row.readyForHandoff} جاهزة` : `${row.readyForHandoff} ready`}</span>
+                        </button>
+                      `,
+                    )
+                    .join("")
+                : renderEmptyState()
+            }
+          </div>
+        </article>
+      </section>
+    </section>
+  `;
+}
+
+function renderAllLeadCard(lead) {
+  const sector = getSectorById(lead.sector_id);
+  const computedStage = getComputedLeadStage(lead, todayDate());
+  const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
+  const linkedOpportunity = getOpportunityByLeadId(lead.id);
+  const canConvert =
+    workflowBucket === "Ready for Handoff" &&
+    lead.current_stage === "Handoff Sent" &&
+    lead.handoff_summary &&
+    !linkedOpportunity;
+
+  return `
+    <article class="source-card dense-card">
+      <button class="source-card-main" type="button" data-open-record="lead:${lead.id}">
+        <div class="kanban-top">
+          <div>
+            <strong dir="${inferTextDirection(lead.company_name)}">${lead.company_name}</strong>
+            <span class="mixed-meta" dir="auto">${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}</span>
+          </div>
+          <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${displayStage(computedStage)}</span>
+        </div>
+        <div class="meta-list">
+          <span><span class="source-badge">${displayChannel(lead.channel)}</span> • ${sector?.sector_name || "—"}</span>
+          <span>${displayWorkflowBucket(workflowBucket)}</span>
+          <span dir="${inferTextDirection(lead.pain_signal || lead.notes)}">${compactText(lead.pain_signal || lead.notes || getValueLabel("noSignalCaptured", "No signal captured yet."), 84)}</span>
+        </div>
+        <div class="card-footer">
+          <small class="card-next" dir="${inferTextDirection(lead.next_step)}">${compactText(lead.next_step || "—", 56)}</small>
+          <small dir="ltr">${shortDate(lead.next_step_date)}</small>
+        </div>
+      </button>
+      <div class="source-card-actions">
+        <button class="ghost-button tight" type="button" data-open-record="lead:${lead.id}">${copy().meta.lang === "ar" ? "فتح السجل" : "Open lead"}</button>
+        ${
+          canConvert
+            ? `<button class="ghost-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button>`
+            : linkedOpportunity
+              ? `<button class="ghost-button tight" type="button" data-open-record="opportunity:${linkedOpportunity.id}">${guidanceLabel("openOpportunity")}</button>`
+              : ""
+        }
+      </div>
+    </article>
+  `;
+}
+
+function renderAllLeadsScreen() {
+  const leads = getAllLeads();
+
+  setScreenActions("");
+
+  return `
+    <section class="analysis-board">
+      <section class="stat-strip source-stat-strip">
+        ${renderMetricCard(copy().meta.lang === "ar" ? "كل اللِيدز" : "All leads", leads.length)}
+        ${renderMetricCard(copy().meta.lang === "ar" ? "تحتاج رد" : "Needs reply", leads.filter((lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Needs Reply").length)}
+        ${renderMetricCard(copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for handoff", leads.filter((lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Ready for Handoff").length)}
+        ${renderMetricCard(copy().meta.lang === "ar" ? "مرتبطة بفرص" : "Already progressed", leads.filter((lead) => getOpportunityByLeadId(lead.id)).length)}
+      </section>
+      <section class="panel all-leads-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-label">${copy().meta.lang === "ar" ? "الصندوق الرئيسي" : "Master Inbox"}</p>
+            <h3>${copy().meta.lang === "ar" ? "كل العملاء المحتملين" : "All Leads"}</h3>
+          </div>
+          <button class="primary-button tight" type="button" data-action="new-lead">${copy().chrome.buttons.newLead}</button>
+        </div>
+        <div class="all-leads-grid">
+          ${leads.length ? leads.map(renderAllLeadCard).join("") : renderEmptyState()}
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function renderSourceScreen(source) {
+  if (!source) {
     return renderEmptyState();
   }
 
+  state.activeSource = source;
   return `
     <section class="source-board">
-      ${renderSourceTabs()}
-      <section class="stat-strip source-stat-strip">
-        ${sources
-          .map((source) => {
-            const metrics = getSourceMetrics(source);
-            return `
-              <article class="stat-card ${source === activeSource ? "accent-stat" : ""}">
-                <span>${displayChannel(source)}</span>
-                <strong>${metrics.leads}</strong>
-                <small>${copy().meta.lang === "ar" ? `${metrics.readyForHandoff} جاهزة للتحويل` : `${metrics.readyForHandoff} ready for handoff`}</small>
-              </article>
-            `;
-          })
-          .join("")}
+      <section class="source-intro-grid">
+        ${renderSourceHuntPanel(source)}
+        ${renderSourceSnapshot(source)}
       </section>
       <section class="source-layout">
         <div class="source-main">
-          ${renderExtractionPanel(activeSource)}
-          ${renderSourceWorkflow(activeSource)}
+          ${renderSourceWorkflow(source)}
         </div>
-        ${renderSourceProgression(activeSource)}
+        ${renderSourceProgression(source)}
       </section>
     </section>
   `;
@@ -1942,6 +2407,7 @@ function bindRecordOpeners() {
   elements.content.querySelectorAll("[data-source-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeSource = button.dataset.sourceTab;
+      state.activeScreen = `source:${button.dataset.sourceTab}`;
       renderApp();
     });
   });
@@ -1970,12 +2436,18 @@ function bindRecordOpeners() {
 }
 
 function renderScreen() {
-  const title = copy().chrome.screens[state.activeScreen];
+  const title = isSourceScreen()
+    ? displayChannel(getScreenSource())
+    : copy().chrome.screens[state.activeScreen];
   elements.screenTitle.textContent = title;
 
   let screenHtml = "";
-  if (state.activeScreen === "sources") {
-    screenHtml = renderSourcesScreen();
+  if (state.activeScreen === "analysis") {
+    screenHtml = renderAnalysisScreen();
+  } else if (state.activeScreen === "all-leads") {
+    screenHtml = renderAllLeadsScreen();
+  } else if (isSourceScreen()) {
+    screenHtml = renderSourceScreen(getScreenSource());
   }
 
   elements.content.innerHTML = `${renderNotice()}${screenHtml}`;

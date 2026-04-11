@@ -19,7 +19,9 @@ const arLocale = {
   },
   chrome: {
     screens: {
-      sources: "لوحة تشغيل المصادر",
+      analysis: "التحليل",
+      "all-leads": "كل العملاء المحتملين",
+      sources: "المصادر",
     },
     sidebar: {
       weeklyFocusLabel: "التركيز الأسبوعي",
