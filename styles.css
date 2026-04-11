@@ -3,12 +3,12 @@
    Visual reference: Linear · Stripe · Raycast · Vercel
 ═══════════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
 
 /* ── Design Tokens ────────────────────────────────────────────── */
 :root {
   /* Canvas — strict, flawless white/gray, no noise */
-  --canvas:          #FAFAFA;
+  --canvas:          #F7F8FA;
   --canvas-elevated: #FFFFFF;
   --canvas-sunken:   #F4F4F5;
 
@@ -28,66 +28,66 @@
   --text-tertiary:   #A1A1AA;
   --text-inverse:    #FFFFFF;
 
-  /* Primary accent — sharp vivid blue */
-  --accent:          #0055FF;
-  --accent-dim:      rgba(0,85,255,0.08);
-  --accent-mid:      rgba(0,85,255,0.15);
-  --accent-hover:    #0044CC;
-  --accent-light:    #F0F5FF;
+  /* Primary accent — Cobalt Blue */
+  --accent:          #2563EB;
+  --accent-dim:      rgba(37,99,235,0.08);
+  --accent-mid:      rgba(37,99,235,0.15);
+  --accent-hover:    #1D4ED8;
+  --accent-light:    #EFF6FF;
 
   /* Semantic - rigorous pure tones */
-  --danger:          #DF1B41;
-  --danger-dim:      rgba(223,27,65,0.08);
-  --danger-mid:      rgba(223,27,65,0.18);
-  --warning:         #D97706;
-  --warning-dim:     rgba(217,119,6,0.08);
-  --warning-mid:     rgba(217,119,6,0.18);
-  --success:         #059669;
-  --success-dim:     rgba(5,150,105,0.08);
-  --success-mid:     rgba(5,150,105,0.18);
+  --danger:          #DC2626;
+  --danger-dim:      rgba(220,38,38,0.08);
+  --danger-mid:      rgba(220,38,38,0.18);
+  --warning:         #F59E0B;
+  --warning-dim:     rgba(245,158,11,0.08);
+  --warning-mid:     rgba(245,158,11,0.18);
+  --success:         #16A34A;
+  --success-dim:     rgba(22,163,74,0.08);
+  --success-mid:     rgba(22,163,74,0.18);
 
   /* Borders — sharp defining lines, no gradients */
   --border:          #E4E4E7;
   --border-strong:   #D4D4D8;
   --border-focus:    var(--accent);
 
-  /* Flat shadows — completely nullified for absolute flatness */
-  --shadow-xs:  none;
-  --shadow-sm:  none;
-  --shadow-md:  none;
-  --shadow-lg:  none;
+  /* Flat shadows — controlled depth, not blur-heavy */
+  --shadow-xs:  0 1px 2px rgba(0,0,0,0.03);
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+  --shadow-md:  0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -1px rgba(0,0,0,0.04);
+  --shadow-lg:  0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.04);
   --shadow-xl:  none;
 
   /* Radii — structured, minimal curves */
-  --r-xs:  2px;
-  --r-sm:  4px;
-  --r-md:  6px;
-  --r-lg:  8px;
-  --r-xl:  12px;
-  --r-2xl: 16px;
+  --r-xs:  4px;
+  --r-sm:  6px;
+  --r-md:  8px;
+  --r-lg:  12px;
+  --r-xl:  16px;
+  --r-2xl: 20px;
 
   /* Topbar height */
   --topbar-h: 60px;
 
   /* ── Execution Authority Tokens ────────────────────────────── */
-  --kpi-number-size:  2.5rem;
+  --kpi-number-size:  2.75rem;
   --kpi-number-tight: -0.04em;
 
   /* Card tiers — strictly bordered, high contrast edge */
   --card-primary-bg:     #FFFFFF;
-  --card-primary-border: #09090B;
-  --card-primary-shadow: none;
+  --card-primary-border: var(--border-strong);
+  --card-primary-shadow: var(--shadow-md);
 
   --card-secondary-bg:   #FFFFFF;
-  --card-secondary-shadow: none;
+  --card-secondary-shadow: var(--shadow-sm);
 
-  --card-passive-bg:   #FAFAFA;
+  --card-passive-bg:   #F7F8FA; /* muted */
   --card-passive-shadow: none;
 
   /* Hero action panel — solid commanding block */
-  --hero-action-bg:     #09090B;
-  --hero-action-border: #09090B;
-  --hero-action-shadow: none;
+  --hero-action-bg:     #172031;
+  --hero-action-border: #1E293B;
+  --hero-action-shadow: var(--shadow-lg);
 }
 
 /* ── Reset ────────────────────────────────────────────────────── */
@@ -105,7 +105,7 @@ body {
 }
 
 html[lang="ar"] body {
-  font-family: 'Cairo', 'Inter', sans-serif;
+  font-family: 'IBM Plex Sans Arabic', 'Inter', sans-serif;
   direction: rtl;
 }
 
