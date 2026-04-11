@@ -18,6 +18,12 @@ import {
   validateLeadTransition,
   validateOpportunityTransition,
 } from "./logic.mjs";
+import {
+  getDisplayLabelMaps,
+  getLocaleConfig,
+  getLocaleSeedFactory,
+  getStorageKey,
+} from "./i18n.mjs";
 
 test("sector creation enforces required fields", () => {
   const errors = getRequiredValidationErrors("sector", {
@@ -150,4 +156,36 @@ test("hydrate dashboard state recovers from invalid persisted data", () => {
   assert.ok(Array.isArray(hydrated.data.sectors));
   assert.ok(Array.isArray(hydrated.data.leads));
   assert.ok(Array.isArray(hydrated.data.opportunities));
+});
+
+test("locale storage keys stay isolated per language", () => {
+  assert.equal(getStorageKey("en"), "mycalls-operational-dashboard.v1.en");
+  assert.equal(getStorageKey("ar"), "mycalls-operational-dashboard.v1.ar");
+  assert.notEqual(getStorageKey("en"), getStorageKey("ar"));
+});
+
+test("locale configs expose explicit language direction", () => {
+  assert.equal(getLocaleConfig("en").meta.lang, "en");
+  assert.equal(getLocaleConfig("en").meta.dir, "ltr");
+  assert.equal(getLocaleConfig("ar").meta.lang, "ar");
+  assert.equal(getLocaleConfig("ar").meta.dir, "rtl");
+});
+
+test("display maps stay canonical-key based across locales", () => {
+  const enDisplay = getDisplayLabelMaps("en");
+  const arDisplay = getDisplayLabelMaps("ar");
+
+  assert.equal(enDisplay.leadStages["Handoff Sent"], "Handoff Sent");
+  assert.equal(arDisplay.leadStages["Handoff Sent"], "تم التسليم");
+  assert.equal(arDisplay.breakOptions["Offer clarity"], "وضوح العرض");
+});
+
+test("locale seed factories preserve shared domain shape in phase 1", () => {
+  const seed = createSeedData();
+  const enSeed = getLocaleSeedFactory("en")(seed);
+  const arSeed = getLocaleSeedFactory("ar")(seed);
+
+  assert.equal(enSeed.sectors.length, seed.sectors.length);
+  assert.equal(arSeed.leads.length, seed.leads.length);
+  assert.equal(arSeed.opportunities.length, seed.opportunities.length);
 });
