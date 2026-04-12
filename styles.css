@@ -5876,23 +5876,16 @@ button.rail-item,
 
 .drawer {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  inset-inline-start: auto;
-  inset-inline-end: auto;
+  inset: 0;
+  margin: auto;
   width: min(760px, calc(100vw - 32px));
   max-height: min(88vh, 960px);
-  height: auto;
-  transform: translate(-50%, -50%);
+  height: fit-content;
+  transform: none;
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 28px 80px rgba(2, 6, 23, 0.54);
   z-index: 90;
-}
-
-html[dir="rtl"] .drawer {
-  transform: translate(-50%, -50%);
-  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.54);
 }
 
 .drawer-header {
@@ -6107,18 +6100,13 @@ html[dir="rtl"] .drawer {
 
 .drawer.drawer-modal {
   position: fixed !important;
-  top: 50% !important;
-  left: 50% !important;
-  right: auto !important;
-  bottom: auto !important;
-  inset-inline-start: auto !important;
-  inset-inline-end: auto !important;
+  inset: 0 !important;
+  margin: auto !important;
   width: min(760px, calc(100vw - 32px)) !important;
   max-width: calc(100vw - 32px) !important;
-  height: auto !important;
+  height: fit-content !important;
   max-height: min(88vh, 960px) !important;
-  transform: translate(-50%, -50%) !important;
-  margin: 0 !important;
+  transform: none !important;
 }
 
 .drawer.drawer-modal .drawer-header {
@@ -6343,7 +6331,7 @@ html[dir="rtl"] .drawer.drawer-modal .drawer-header {
 }
 
 html[dir="rtl"] .drawer.drawer-modal {
-  transform: translate(-50%, -50%) !important;
+  transform: none !important;
 }
 
 html[dir="rtl"] .drawer.drawer-modal .drawer-header > div:first-child {
