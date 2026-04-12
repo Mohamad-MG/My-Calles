@@ -848,6 +848,11 @@ function closeDrawer() {
   renderDrawer();
 }
 
+function openRecord(recordToken) {
+  const [entityType, entityId] = recordToken.split(":");
+  setDrawer({ open: true, kind: "detail", entityType, entityId, mode: "view", message: "" });
+}
+
 function renderNav() {
   elements.nav.innerHTML = getPrimaryScreens().map(
     (screen) => `
@@ -2168,6 +2173,13 @@ function renderDrawer() {
   `;
 
   bindDrawerActions();
+  elements.drawerBody.querySelectorAll("[data-open-record]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openRecord(button.dataset.openRecord);
+    });
+  });
 }
 
 function readFormValues(form) {
@@ -2511,10 +2523,13 @@ function bindRecordOpeners() {
     });
   });
 
-  elements.content.querySelectorAll("[data-open-record]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const [entityType, entityId] = button.dataset.openRecord.split(":");
-      setDrawer({ open: true, kind: "detail", entityType, entityId, mode: "view", message: "" });
+  [elements.content, elements.drawerBody].forEach((scope) => {
+    scope?.querySelectorAll("[data-open-record]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openRecord(button.dataset.openRecord);
+      });
     });
   });
 
@@ -2573,7 +2588,11 @@ function renderShellChrome() {
   elements.productName.textContent = copy().meta.productName;
   if (elements.sidebarWeeklyLabel) elements.sidebarWeeklyLabel.textContent = copy().chrome.sidebar.weeklyFocusLabel;
   if (elements.sidebarRulesLabel) elements.sidebarRulesLabel.textContent = copy().chrome.sidebar.rulesLabel;
-  if (elements.rulesList) elements.rulesList.innerHTML = copy().chrome.sidebar.rules.map((rule) => `<li>${rule}</li>`).join("");
+  if (elements.rulesList) {
+    const sidebarRules = copy().chrome.sidebar.rules || [];
+    elements.rulesList.innerHTML = sidebarRules.map((rule) => `<li>${rule}</li>`).join("");
+    elements.rulesList.closest(".sidebar-panel")?.classList.toggle("hidden", !sidebarRules.length);
+  }
   elements.topbarEyebrow.textContent = copy().meta.dashboardEyebrow;
   elements.drawerClose.setAttribute(
     "aria-label",

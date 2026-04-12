@@ -26,10 +26,7 @@ const arLocale = {
     sidebar: {
       weeklyFocusLabel: "التركيز الأسبوعي",
       rulesLabel: "قواعد التشغيل",
-      rules: [
-        "الرد ليس فرصة.",
-        "لا يوجد عرض بدون جاهزية.",
-      ],
+      rules: [],
     },
     filters: {
       sector: "القطاع",

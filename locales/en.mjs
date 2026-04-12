@@ -25,10 +25,7 @@ const enLocale = {
     sidebar: {
       weeklyFocusLabel: "Weekly Focus",
       rulesLabel: "Operating Rules",
-      rules: [
-        "A reply is not an opportunity.",
-        "No proposal without readiness.",
-      ],
+      rules: [],
     },
     filters: {
       sector: "Sector",

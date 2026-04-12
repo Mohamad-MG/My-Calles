@@ -5473,9 +5473,9 @@ body,
 
 .command-row,
 .command-row.compact {
-  grid-template-columns: minmax(0, 1.15fr) minmax(170px, 0.95fr) minmax(170px, 0.9fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   padding: 14px 16px 14px 18px;
   border-radius: 18px;
 }
@@ -5523,6 +5523,26 @@ html[lang="ar"] .command-row::before {
 .command-company strong {
   font-size: 0.96rem;
   line-height: 1.2;
+}
+
+.command-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(170px, 0.95fr) minmax(170px, 0.9fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.command-row-main > * {
+  min-width: 0;
 }
 
 .mixed-meta {
@@ -5736,23 +5756,49 @@ button.rail-item,
   background: rgba(2, 6, 23, 0.46);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
+  z-index: 80;
 }
 
 .drawer {
-  width: min(560px, 100vw);
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  inset-inline-start: auto;
+  inset-inline-end: auto;
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(88vh, 960px);
+  height: auto;
+  transform: translate(-50%, -50%);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.54);
+  z-index: 90;
+}
+
+html[dir="rtl"] .drawer {
+  transform: translate(-50%, -50%);
+  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.54);
 }
 
 .drawer-header {
   padding: 20px 22px 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .drawer-body {
+  max-height: calc(min(88vh, 960px) - 88px);
   padding: 18px 18px 24px;
   gap: 12px;
+  overflow-y: auto;
 }
 
 .drawer-section {
   padding: 15px 16px;
+  border-radius: 18px;
 }
 
 .drawer-section textarea {
@@ -5767,6 +5813,10 @@ button.rail-item,
 @media (max-width: 1280px) {
   .command-row,
   .command-row.compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .command-row-main {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -5818,6 +5868,12 @@ button.rail-item,
   }
 
   .drawer {
-    width: 100vw;
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    border-radius: 20px;
+  }
+
+  .drawer-body {
+    max-height: calc(100vh - 104px);
   }
 }
