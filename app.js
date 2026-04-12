@@ -650,6 +650,24 @@ function getSourceTargetProgress(source, todayCaptured = 0) {
 }
 
 function getSourceActionPrompt(source, metrics) {
+  if (metrics.overdueFollowups > 0) {
+    return copy().meta.lang === "ar"
+      ? `${metrics.overdueFollowups} متابعات متأخرة — نظّفها الآن قبل أي التقاط جديد`
+      : `${metrics.overdueFollowups} follow-ups are overdue — clear them before fresh capture`;
+  }
+
+  if (metrics.followUpDueToday > 0) {
+    return copy().meta.lang === "ar"
+      ? `${metrics.followUpDueToday} جهات تحتاج متابعة اليوم — نفّذ دورة متابعة الآن`
+      : `${metrics.followUpDueToday} leads need follow-up today — run one follow-up cycle now`;
+  }
+
+  if (metrics.untouchedCapturedToday > 0) {
+    return copy().meta.lang === "ar"
+      ? `${metrics.untouchedCapturedToday} جهات تحتاج أول تواصل الآن — افتح outreach وابدأ فورًا`
+      : `${metrics.untouchedCapturedToday} captured leads still need first touch — start outreach now`;
+  }
+
   if (!metrics.todayCaptured) {
     return copy().meta.lang === "ar"
       ? `لا يوجد التقاط اليوم بعد — ابدأ بـ 5 جهات جديدة داخل ${displayChannel(source)}`
@@ -671,6 +689,32 @@ function getSourceActionPrompt(source, metrics) {
   return copy().meta.lang === "ar"
     ? `القناة على المسار — أكمل دورة التقاط واحدة ثم ارجع للردود`
     : "On track — complete one more capture cycle, then shift into follow-up";
+}
+
+function getSourceExecutionAlert(source, metrics) {
+  if (metrics.overdueFollowUpWarning) {
+    return metrics.overdueFollowUpWarning;
+  }
+
+  if (metrics.followUpDueWarning) {
+    return metrics.followUpDueWarning;
+  }
+
+  if (metrics.firstTouchWarning) {
+    return metrics.firstTouchWarning;
+  }
+
+  if (metrics.warning) {
+    return metrics.warning;
+  }
+
+  if (!metrics.todayCaptured && metrics.dailyTarget > 0) {
+    return copy().meta.lang === "ar"
+      ? `لم يتم التقاط أي جهة من ${displayChannel(source)} بعد`
+      : `No leads captured from ${displayChannel(source)} yet today`;
+  }
+
+  return "";
 }
 
 function renderTargetStatusBadge(status) {
@@ -754,6 +798,87 @@ function resolveActiveSource() {
 
 function getLeadCapturedDate(lead) {
   return typeof lead.created_at === "string" ? lead.created_at.slice(0, 10) : "";
+}
+
+function getLeadFirstTouchDate(lead) {
+  return typeof lead?.first_touch_at === "string" ? lead.first_touch_at.slice(0, 10) : "";
+}
+
+function getLeadFollowUpDueDate(lead) {
+  return typeof lead?.follow_up_due_at === "string" ? lead.follow_up_due_at.slice(0, 10) : "";
+}
+
+function getLeadFollowUpSentDate(lead) {
+  return typeof lead?.follow_up_sent_at === "string" ? lead.follow_up_sent_at.slice(0, 10) : "";
+}
+
+function getLeadRespondedDate(lead) {
+  return typeof lead?.responded_at === "string" ? lead.responded_at.slice(0, 10) : "";
+}
+
+function shiftDate(dateValue, days = 0) {
+  const anchor = dateValue || todayDate();
+  const date = new Date(`${anchor}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getLeadFollowUpTiming(lead) {
+  const dueDate = getLeadFollowUpDueDate(lead);
+  const today = todayDate();
+
+  if (!dueDate) {
+    return "none";
+  }
+
+  if (dueDate < today) {
+    return "overdue";
+  }
+
+  if (dueDate === today) {
+    return "due_today";
+  }
+
+  return "not_due_yet";
+}
+
+function leadFollowUpNeedsAction(lead) {
+  const timing = getLeadFollowUpTiming(lead);
+  const effectiveState = getEffectiveLeadOperationalState(lead);
+  return effectiveState === "needs_follow_up" || timing === "due_today" || timing === "overdue";
+}
+
+function leadNeedsFirstTouch(lead) {
+  return Boolean(lead) && Boolean(getLeadCapturedDate(lead)) && !getLeadFirstTouchDate(lead);
+}
+
+function getEffectiveLeadOperationalState(lead) {
+  if (!lead) {
+    return "active";
+  }
+
+  if (lead.operational_state === "waiting_response") {
+    const followUpTiming = getLeadFollowUpTiming(lead);
+    if (followUpTiming === "due_today" || followUpTiming === "overdue") {
+      return "needs_follow_up";
+    }
+  }
+
+  return lead.operational_state || "active";
+}
+
+function getLeadOperationalStateLabel(stateValue) {
+  const labels = {
+    active: copy().meta.lang === "ar" ? "نشط" : "Active",
+    captured_today: copy().meta.lang === "ar" ? "تم التقاطه اليوم" : "Captured today",
+    needs_first_touch: copy().meta.lang === "ar" ? "يحتاج أول تواصل" : "Needs first touch",
+    first_touch_done: copy().meta.lang === "ar" ? "تم أول تواصل" : "First touch done",
+    waiting_response: copy().meta.lang === "ar" ? "بانتظار الرد" : "Waiting response",
+    needs_follow_up: copy().meta.lang === "ar" ? "يحتاج متابعة" : "Needs follow-up",
+    responded: copy().meta.lang === "ar" ? "تم الرد" : "Responded",
+  };
+
+  return labels[stateValue] || stateValue || (copy().meta.lang === "ar" ? "نشط" : "Active");
 }
 
 function sourceMatchesAnalysisFilters(source) {
@@ -865,16 +990,49 @@ function getSourceMetrics(source = resolveActiveSource()) {
   const opportunities = getSourceOpportunities(source);
   const today = todayDate();
   const todayCaptured = leads.filter((lead) => getLeadCapturedDate(lead) === today).length;
+  const firstTouchesDoneToday = leads.filter((lead) => getLeadFirstTouchDate(lead) === today).length;
+  const untouchedCapturedToday = leads.filter(
+    (lead) => getLeadCapturedDate(lead) === today && leadNeedsFirstTouch(lead),
+  ).length;
+  const waitingResponseCount = leads.filter((lead) => getEffectiveLeadOperationalState(lead) === "waiting_response").length;
+  const followUpDueToday = leads.filter((lead) => getLeadFollowUpTiming(lead) === "due_today").length;
+  const overdueFollowups = leads.filter((lead) => getLeadFollowUpTiming(lead) === "overdue").length;
+  const respondedToday = leads.filter((lead) => getLeadRespondedDate(lead) === today).length;
   const readyForHandoff = leads.filter(
     (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Ready for Handoff",
   ).length;
   const needsReply = leads.filter(
     (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Needs Reply",
   ).length;
+  const firstTouchWarning = untouchedCapturedToday > 0
+    ? (copy().meta.lang === "ar"
+        ? `${untouchedCapturedToday} جهات ملتقطة ما زالت تحتاج أول تواصل`
+        : `${untouchedCapturedToday} captured leads still need first touch`)
+    : "";
+  const followUpDueWarning = followUpDueToday > 0
+    ? (copy().meta.lang === "ar"
+        ? `${followUpDueToday} جهات تحتاج متابعة اليوم`
+        : `${followUpDueToday} leads need follow-up today`)
+    : "";
+  const overdueFollowUpWarning = overdueFollowups > 0
+    ? (copy().meta.lang === "ar"
+        ? `${overdueFollowups} متابعات متأخرة`
+        : `${overdueFollowups} follow-ups are overdue`)
+    : "";
+
   return {
     ...getSourceTargetProgress(source, todayCaptured),
     todayLeads: todayCaptured,
     leads: leads.length,
+    firstTouchesDoneToday,
+    untouchedCapturedToday,
+    waitingResponseCount,
+    followUpDueToday,
+    overdueFollowups,
+    respondedToday,
+    firstTouchWarning,
+    followUpDueWarning,
+    overdueFollowUpWarning,
     needsReply,
     readyForHandoff,
     opportunities: opportunities.length,
@@ -899,10 +1057,43 @@ function getAnalysisSourceMetrics(source) {
   const leads = getAnalysisSourceLeads(source);
   const opportunities = getAnalysisSourceOpportunities(source);
   const todayCaptured = leads.filter((lead) => getLeadCapturedDate(lead) === today).length;
+  const firstTouchesDoneToday = leads.filter((lead) => getLeadFirstTouchDate(lead) === today).length;
+  const untouchedCapturedToday = leads.filter(
+    (lead) => getLeadCapturedDate(lead) === today && leadNeedsFirstTouch(lead),
+  ).length;
+  const waitingResponseCount = leads.filter((lead) => getEffectiveLeadOperationalState(lead) === "waiting_response").length;
+  const followUpDueToday = leads.filter((lead) => getLeadFollowUpTiming(lead) === "due_today").length;
+  const overdueFollowups = leads.filter((lead) => getLeadFollowUpTiming(lead) === "overdue").length;
+  const respondedToday = leads.filter((lead) => getLeadRespondedDate(lead) === today).length;
+  const firstTouchWarning = untouchedCapturedToday > 0
+    ? (copy().meta.lang === "ar"
+        ? `${untouchedCapturedToday} جهات ملتقطة ما زالت تحتاج أول تواصل`
+        : `${untouchedCapturedToday} captured leads still need first touch`)
+    : "";
+  const followUpDueWarning = followUpDueToday > 0
+    ? (copy().meta.lang === "ar"
+        ? `${followUpDueToday} جهات تحتاج متابعة اليوم`
+        : `${followUpDueToday} leads need follow-up today`)
+    : "";
+  const overdueFollowUpWarning = overdueFollowups > 0
+    ? (copy().meta.lang === "ar"
+        ? `${overdueFollowups} متابعات متأخرة`
+        : `${overdueFollowups} follow-ups are overdue`)
+    : "";
+
   return {
     ...getSourceTargetProgress(source, todayCaptured),
     todayLeads: todayCaptured,
     leads: leads.length,
+    firstTouchesDoneToday,
+    untouchedCapturedToday,
+    waitingResponseCount,
+    followUpDueToday,
+    overdueFollowups,
+    respondedToday,
+    firstTouchWarning,
+    followUpDueWarning,
+    overdueFollowUpWarning,
     needsReply: leads.filter(
       (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Needs Reply",
     ).length,
@@ -973,6 +1164,14 @@ function getAnalysisMetrics() {
 
   return {
     newToday: leads.filter((lead) => getLeadCapturedDate(lead) === today).length,
+    firstTouchesDoneToday: leads.filter((lead) => getLeadFirstTouchDate(lead) === today).length,
+    untouchedCapturedToday: leads.filter(
+      (lead) => getLeadCapturedDate(lead) === today && leadNeedsFirstTouch(lead),
+    ).length,
+    waitingResponseCount: leads.filter((lead) => getEffectiveLeadOperationalState(lead) === "waiting_response").length,
+    followUpDueToday: leads.filter((lead) => getLeadFollowUpTiming(lead) === "due_today").length,
+    overdueFollowups: leads.filter((lead) => getLeadFollowUpTiming(lead) === "overdue").length,
+    respondedToday: leads.filter((lead) => getLeadRespondedDate(lead) === today).length,
     needsContact: leads.filter((lead) => {
       const bucket = getLeadWorkflowBucket(lead, state.data.opportunities);
       return ["New", "Needs Extraction", "Needs Reply"].includes(bucket);
@@ -994,7 +1193,14 @@ function getSourcePriorityRows() {
       return {
         source,
         metrics,
-        score: metrics.readyForHandoff * 3 + metrics.needsReply * 2 + metrics.todayLeads * 2 + metrics.leads,
+        score:
+          metrics.overdueFollowups * 5 +
+          metrics.followUpDueToday * 4 +
+          metrics.untouchedCapturedToday * 4 +
+          metrics.readyForHandoff * 3 +
+          metrics.needsReply * 2 +
+          metrics.todayLeads * 2 +
+          metrics.leads,
       };
     })
     .sort((left, right) => right.score - left.score || right.metrics.todayLeads - left.metrics.todayLeads || right.metrics.leads - left.metrics.leads);
@@ -1006,6 +1212,18 @@ function getTargetWarningRows() {
     .sort((left, right) => right.metrics.remainingToTarget - left.metrics.remainingToTarget);
 }
 
+function getUntouchedAlertRows() {
+  return getSourcePriorityRows()
+    .filter(({ metrics }) => metrics.untouchedCapturedToday > 0)
+    .sort((left, right) => right.metrics.untouchedCapturedToday - left.metrics.untouchedCapturedToday);
+}
+
+function getFollowUpAlertRows() {
+  return getSourcePriorityRows()
+    .filter(({ metrics }) => metrics.overdueFollowups > 0 || metrics.followUpDueToday > 0)
+    .sort((left, right) => right.metrics.overdueFollowups - left.metrics.overdueFollowups || right.metrics.followUpDueToday - left.metrics.followUpDueToday);
+}
+
 function getTodayActionQueue(limit = 6) {
   const today = todayDate();
   return state.data.leads
@@ -1014,9 +1232,13 @@ function getTodayActionQueue(limit = 6) {
       const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
       const computedStage = getComputedLeadStage(lead, today);
       let priority = 0;
+      const followUpTiming = getLeadFollowUpTiming(lead);
       if (workflowBucket === "Ready for Handoff") priority += 5;
       if (workflowBucket === "Needs Reply") priority += 4;
       if (workflowBucket === "Needs Qualification") priority += 3;
+      if (getLeadCapturedDate(lead) === today && leadNeedsFirstTouch(lead)) priority += 5;
+      if (followUpTiming === "overdue") priority += 6;
+      if (followUpTiming === "due_today") priority += 5;
       if (computedStage === "Delayed") priority += 3;
       if (lead.next_step_date && lead.next_step_date <= today) priority += 2;
       if (!lead.next_step) priority += 1;
@@ -1529,6 +1751,7 @@ function renderSourceHuntPanel(source) {
 
 function renderSourceSnapshot(source) {
   const metrics = getSourceMetrics(source);
+  const executionAlert = getSourceExecutionAlert(source, metrics);
   return `
     <article class="panel source-panel snapshot-panel">
       <div class="panel-head">
@@ -1539,6 +1762,12 @@ function renderSourceSnapshot(source) {
       </div>
       <div class="detail-grid tight">
         <div><span>${copy().meta.lang === "ar" ? "التُقطوا اليوم" : "Captured today"}</span><strong>${metrics.todayLeads}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "أول تواصل اليوم" : "First touches today"}</span><strong>${metrics.firstTouchesDoneToday}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "بلا أول تواصل" : "Untouched captured"}</span><strong>${metrics.untouchedCapturedToday}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "بانتظار الرد" : "Waiting response"}</span><strong>${metrics.waitingResponseCount}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "متابعة اليوم" : "Follow-up due today"}</span><strong>${metrics.followUpDueToday}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "متابعات متأخرة" : "Overdue follow-ups"}</span><strong>${metrics.overdueFollowups}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "تم الرد اليوم" : "Responded today"}</span><strong>${metrics.respondedToday}</strong></div>
         <div><span>${copy().meta.lang === "ar" ? "هدف اليوم" : "Daily target"}</span><strong>${metrics.dailyTarget}</strong></div>
         <div><span>${copy().meta.lang === "ar" ? "المتبقي" : "Remaining"}</span><strong>${metrics.remainingToTarget}</strong></div>
         <div><span>${copy().meta.lang === "ar" ? "حالة الهدف" : "Target status"}</span><strong>${copy().meta.lang === "ar" ? (metrics.targetStatus === "done" ? "مكتمل" : metrics.targetStatus === "on_track" ? "على المسار" : "متأخر") : (metrics.targetStatus === "done" ? "Done" : metrics.targetStatus === "on_track" ? "On track" : "Behind")}</strong></div>
@@ -1547,7 +1776,7 @@ function renderSourceSnapshot(source) {
         <div><span>${copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for handoff"}</span><strong>${metrics.readyForHandoff}</strong></div>
         <div><span>${copy().meta.lang === "ar" ? "فرص ناتجة" : "Progressed opportunities"}</span><strong>${metrics.opportunities}</strong></div>
       </div>
-      ${metrics.warning ? `<p class="source-target-banner warning inline-warning">${metrics.warning}</p>` : ""}
+      ${executionAlert ? `<p class="source-target-banner warning inline-warning">${executionAlert}</p>` : ""}
       <p class="card-summary">
         ${
           copy().meta.lang === "ar"
@@ -1746,6 +1975,7 @@ function getLeadCommandState(lead) {
   const computedStage = getComputedLeadStage(lead, today);
   const isOverdue = computedStage === "Delayed" || (lead.next_step_date && lead.next_step_date < today);
   const isDueToday = lead.next_step_date && lead.next_step_date === today;
+  const followUpTiming = getLeadFollowUpTiming(lead);
 
   if (isOverdue || workflowBucket === "Ready for Handoff") {
     return {
@@ -1757,13 +1987,37 @@ function getLeadCommandState(lead) {
     };
   }
 
+  if (followUpTiming === "overdue") {
+    return {
+      rowTone: "critical",
+      urgencyClass: "danger",
+      urgencyLabel: copy().meta.lang === "ar" ? "متابعة متأخرة" : "Follow-up overdue",
+    };
+  }
+
+  if (followUpTiming === "due_today") {
+    return {
+      rowTone: "active",
+      urgencyClass: "warning",
+      urgencyLabel: copy().meta.lang === "ar" ? "متابعة اليوم" : "Follow-up today",
+    };
+  }
+
   if (workflowBucket === "Needs Reply" || isDueToday) {
     return {
       rowTone: "active",
       urgencyClass: "warning",
       urgencyLabel: isDueToday
         ? (copy().meta.lang === "ar" ? "اليوم" : "Today")
-        : (copy().meta.lang === "ar" ? "يحتاج رد" : "Needs reply"),
+      : (copy().meta.lang === "ar" ? "يحتاج رد" : "Needs reply"),
+    };
+  }
+
+  if (getLeadCapturedDate(lead) === today && leadNeedsFirstTouch(lead)) {
+    return {
+      rowTone: "active",
+      urgencyClass: "warning",
+      urgencyLabel: copy().meta.lang === "ar" ? "أول تواصل" : "First touch",
     };
   }
 
@@ -1790,6 +2044,7 @@ function renderLeadCommandRow(lead, options = {}) {
     lead.next_step || getValueLabel("noImmediateNextStep", "No immediate next step"),
     options.stepLimit || 58,
   );
+  const operationalLabel = getLeadOperationalStateLabel(getEffectiveLeadOperationalState(lead));
   const ctaHtml =
     options.preferConvert &&
     workflowBucket === "Ready for Handoff" &&
@@ -1815,6 +2070,7 @@ function renderLeadCommandRow(lead, options = {}) {
         <span class="source-badge">${displayChannel(lead.channel)}</span>
         <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${displayWorkflowBucket(workflowBucket)}</span>
         <span class="badge">${sector?.sector_name || displayStage(computedStage)}</span>
+        <span class="badge ${leadNeedsFirstTouch(lead) ? "warning" : ""}">${operationalLabel}</span>
         <span class="badge ${commandState.urgencyClass} command-urgency">${commandState.urgencyLabel}</span>
       </div>
       <div class="command-row-cta">${ctaHtml}</div>
@@ -1826,6 +2082,8 @@ function renderAnalysisScreen() {
   const metrics = getAnalysisMetrics();
   const sourceRows = getSourcePriorityRows();
   const targetWarnings = getTargetWarningRows();
+  const untouchedAlerts = getUntouchedAlertRows();
+  const followUpAlerts = getFollowUpAlertRows();
   const actionQueue = getTodayActionQueue(5);
 
   setScreenActions("");
@@ -1834,10 +2092,13 @@ function renderAnalysisScreen() {
     <section class="command-deck">
       <section class="top-strip metrics-strip">
         ${renderKpiCell(copy().meta.lang === "ar" ? "إشارات اليوم" : "Signals today", metrics.newToday, "primary")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "أول تواصل اليوم" : "First touches today", metrics.firstTouchesDoneToday)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "بانتظار الرد" : "Waiting response", metrics.waitingResponseCount)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "متابعة اليوم" : "Follow-up due today", metrics.followUpDueToday, metrics.followUpDueToday ? "alert" : "")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "متابعات متأخرة" : "Overdue follow-ups", metrics.overdueFollowups, metrics.overdueFollowups ? "alert" : "")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "تم الرد اليوم" : "Responded today", metrics.respondedToday)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "بلا أول تواصل" : "Untouched captured", metrics.untouchedCapturedToday, metrics.untouchedCapturedToday ? "alert" : "")}
         ${renderKpiCell(copy().meta.lang === "ar" ? "المتبقي للأهداف" : "Remaining to target", metrics.remainingToTarget, metrics.remainingToTarget ? "alert" : "")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "قنوات مكتملة" : "Sources done", metrics.targetDone)}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "تحتاج حركة" : "Need movement", metrics.needsContact, "alert")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready to convert", metrics.readyForHandoff)}
         ${renderKpiCell(copy().meta.lang === "ar" ? "فرص مفتوحة" : "Open revenue", metrics.openOpportunities)}
       </section>
 
@@ -1879,8 +2140,8 @@ function renderAnalysisScreen() {
                       <strong>${displayChannel(source)}</strong>
                       <div class="meta-row">${
                         copy().meta.lang === "ar"
-                          ? `${sourceMetrics.todayLeads}/${sourceMetrics.dailyTarget} اليوم • المتبقي ${sourceMetrics.remainingToTarget} • ${sourceMetrics.needsReply} تحتاج رد`
-                          : `${sourceMetrics.todayLeads}/${sourceMetrics.dailyTarget} today • ${sourceMetrics.remainingToTarget} remaining • ${sourceMetrics.needsReply} need reply`
+                          ? `${sourceMetrics.followUpDueToday} متابعة اليوم • ${sourceMetrics.overdueFollowups} متأخرة • ${sourceMetrics.untouchedCapturedToday} بلا لمس`
+                          : `${sourceMetrics.followUpDueToday} due today • ${sourceMetrics.overdueFollowups} overdue • ${sourceMetrics.untouchedCapturedToday} untouched`
                       }</div>
                       <div class="meta-row source-action-copy">${getSourceActionPrompt(source, sourceMetrics)}</div>
                     </div>
@@ -1898,29 +2159,29 @@ function renderAnalysisScreen() {
           <div class="intent-head">
             <div>
               <p class="panel-label">${copy().meta.lang === "ar" ? "ضغط التنفيذ" : "Execution Pressure"}</p>
-              <h3>${copy().meta.lang === "ar" ? "الفجوة اليومية" : "Daily Target Gap"}</h3>
+              <h3>${copy().meta.lang === "ar" ? "أين نتحرك الآن" : "Where to Move Now"}</h3>
             </div>
           </div>
           <div class="intent-list">
             ${
-              targetWarnings.length
-                ? targetWarnings
+              (followUpAlerts.length || untouchedAlerts.length || targetWarnings.length)
+                ? [
+                    ...followUpAlerts,
+                    ...untouchedAlerts.filter(({ source }) => !followUpAlerts.some((item) => item.source === source)),
+                    ...targetWarnings.filter(({ source }) => !followUpAlerts.some((item) => item.source === source) && !untouchedAlerts.some((item) => item.source === source)),
+                  ]
                     .map(
                       ({ source, metrics: sourceMetrics }) => `
                         <button class="system-row warning" type="button" data-source-tab="${source}">
                           <div class="system-row-main">
                             <strong>${displayChannel(source)}</strong>
                             <div class="meta-row">
-                              ${
-                                copy().meta.lang === "ar"
-                                  ? `${sourceMetrics.warning} • ${sourceMetrics.todayLeads}/${sourceMetrics.dailyTarget}`
-                                  : `${sourceMetrics.warning} • ${sourceMetrics.todayLeads}/${sourceMetrics.dailyTarget}`
-                              }
+                              ${getSourceExecutionAlert(source, sourceMetrics) || getSourceActionPrompt(source, sourceMetrics)}
                             </div>
                           </div>
                           <div class="system-row-side">
-                            <span class="system-number">${sourceMetrics.remainingToTarget}</span>
-                            <span class="system-label">${copy().meta.lang === "ar" ? "متبقٍ" : "left"}</span>
+                            <span class="system-number">${sourceMetrics.overdueFollowups || sourceMetrics.followUpDueToday || sourceMetrics.untouchedCapturedToday || sourceMetrics.remainingToTarget}</span>
+                            <span class="system-label">${copy().meta.lang === "ar" ? (sourceMetrics.overdueFollowups ? "متأخرة" : sourceMetrics.followUpDueToday ? "اليوم" : sourceMetrics.untouchedCapturedToday ? "تحتاج لمس" : "متبقٍ") : (sourceMetrics.overdueFollowups ? "overdue" : sourceMetrics.followUpDueToday ? "today" : sourceMetrics.untouchedCapturedToday ? "untouched" : "left")}</span>
                           </div>
                         </button>
                       `,
@@ -2056,13 +2317,28 @@ function renderRecentCaptureActions(source) {
     return "";
   }
 
+  const nextMessage = leadNeedsFirstTouch(recentLead)
+    ? (copy().meta.lang === "ar"
+        ? `${recentLead.company_name} تم التقاطها وتحتاج أول تواصل الآن.`
+        : `${recentLead.company_name} was captured and still needs first touch now.`)
+    : leadFollowUpNeedsAction(recentLead)
+      ? (copy().meta.lang === "ar"
+          ? `${recentLead.company_name} تحتاج متابعة الآن. لا تدعها تبقى معلقة.`
+          : `${recentLead.company_name} needs follow-up now. Do not let it stall.`)
+    : (copy().meta.lang === "ar"
+        ? `${recentLead.company_name} دخلت في المتابعة. الخطوة التالية واضحة.`
+        : `${recentLead.company_name} is already in motion. The next step is clear.`);
+
   return `
     <div class="recent-capture-banner">
-      <p>${copy().meta.lang === "ar" ? `تم التقاط ${recentLead.company_name}. الخطوة التالية الآن يجب أن تكون واضحة.` : `${recentLead.company_name} captured. The next move should be obvious now.`}</p>
+      <p>${nextMessage}</p>
       <div class="guidance-actions">
         <button class="ghost-button tight" type="button" data-open-record="lead:${recentLead.id}">${copy().meta.lang === "ar" ? "افتح الجهة" : "Open lead"}</button>
         <button class="ghost-button tight" type="button" data-open-opener="${recentLead.id}">${copy().meta.lang === "ar" ? "أضف opener note" : "Add opener note"}</button>
         <button class="primary-button tight" type="button" data-move-outreach="${recentLead.id}">${copy().meta.lang === "ar" ? "حرّك إلى outreach" : "Move to outreach"}</button>
+        ${leadNeedsFirstTouch(recentLead) ? `<button class="success-button tight" type="button" data-mark-first-touch="${recentLead.id}">${copy().meta.lang === "ar" ? "تم أول تواصل" : "Mark first touch done"}</button>` : ""}
+        ${!leadNeedsFirstTouch(recentLead) && recentLead.operational_state !== "waiting_response" ? `<button class="ghost-button tight" type="button" data-mark-waiting-response="${recentLead.id}">${copy().meta.lang === "ar" ? "بانتظار الرد" : "Move to waiting response"}</button>` : ""}
+        ${leadFollowUpNeedsAction(recentLead) ? `<button class="success-button tight" type="button" data-mark-follow-up-sent="${recentLead.id}">${copy().meta.lang === "ar" ? "تمت المتابعة" : "Mark follow-up sent"}</button>` : ""}
       </div>
     </div>
   `;
@@ -2076,12 +2352,12 @@ function renderSourceScreen(source) {
   state.activeSource = source;
   const metrics = getSourceMetrics(source);
   const sourceLeads = getSourceLeads(source);
-  const targetWarning = metrics.warning;
+  const executionAlert = getSourceExecutionAlert(source, metrics);
   const actionPrompt = getSourceActionPrompt(source, metrics);
   const commandLeads = sourceLeads
     .filter((lead) => {
       const bucket = getLeadWorkflowBucket(lead, state.data.opportunities);
-      return ["Ready for Handoff", "Needs Reply", "Needs Qualification"].includes(bucket);
+      return leadNeedsFirstTouch(lead) || leadFollowUpNeedsAction(lead) || ["Ready for Handoff", "Needs Reply", "Needs Qualification"].includes(bucket);
     })
     .slice(0, 5);
 
@@ -2091,10 +2367,14 @@ function renderSourceScreen(source) {
     <section class="command-deck source-deck">
       <section class="top-strip metrics-strip">
         ${renderKpiCell(copy().meta.lang === "ar" ? "التُقطوا اليوم" : "Captured today", metrics.todayLeads, "primary")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "أول تواصل اليوم" : "First touches today", metrics.firstTouchesDoneToday)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "بانتظار الرد" : "Waiting response", metrics.waitingResponseCount)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "متابعة اليوم" : "Follow-up due today", metrics.followUpDueToday, metrics.followUpDueToday ? "alert" : "")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "متابعات متأخرة" : "Overdue follow-ups", metrics.overdueFollowups, metrics.overdueFollowups ? "alert" : "")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "تم الرد اليوم" : "Responded today", metrics.respondedToday)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "بلا أول تواصل" : "Untouched captured", metrics.untouchedCapturedToday, metrics.untouchedCapturedToday ? "alert" : "")}
         ${renderKpiCell(copy().meta.lang === "ar" ? "هدف اليوم" : "Daily target", metrics.dailyTarget)}
         ${renderKpiCell(copy().meta.lang === "ar" ? "المتبقي" : "Remaining", metrics.remainingToTarget, metrics.targetStatus === "behind" ? "alert" : "")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "إجمالي اللِيدز" : "Captured", metrics.leads, "primary")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "حالة الهدف" : "Target status", copy().meta.lang === "ar" ? (metrics.targetStatus === "done" ? "مكتمل" : metrics.targetStatus === "on_track" ? "على المسار" : "متأخر") : (metrics.targetStatus === "done" ? "Done" : metrics.targetStatus === "on_track" ? "On track" : "Behind"), metrics.targetStatus === "behind" ? "alert" : "")}
       </section>
 
       <section class="command-zone">
@@ -2105,7 +2385,7 @@ function renderSourceScreen(source) {
             <p class="zone-copy">${actionPrompt}</p>
           </div>
         </div>
-        ${targetWarning ? `<div class="source-target-banner warning">${targetWarning}</div>` : `<div class="source-target-banner">${copy().meta.lang === "ar" ? `الهدف اليومي: ${metrics.todayLeads} / ${metrics.dailyTarget}` : `Daily target: ${metrics.todayLeads} / ${metrics.dailyTarget}`}</div>`}
+        ${executionAlert ? `<div class="source-target-banner warning">${executionAlert}</div>` : `<div class="source-target-banner">${copy().meta.lang === "ar" ? `الهدف اليومي: ${metrics.todayLeads} / ${metrics.dailyTarget}` : `Daily target: ${metrics.todayLeads} / ${metrics.dailyTarget}`}</div>`}
         ${renderQuickCaptureForm(source)}
         ${renderRecentCaptureActions(source)}
         <div class="command-zone-list">
@@ -2209,6 +2489,10 @@ function renderLeadDrawer(lead) {
     lead.handoff_summary &&
     !hasOpportunityForLead(state.data.opportunities, lead.id);
   const guardFlags = getLeadGuardFlags(lead, todayDate());
+  const needsFirstTouch = leadNeedsFirstTouch(lead);
+  const effectiveOperationalState = getEffectiveLeadOperationalState(lead);
+  const followUpDueDate = getLeadFollowUpDueDate(lead);
+  const followUpTiming = getLeadFollowUpTiming(lead);
   return `
     <section class="drawer-section">
       <h4>${getFieldLabel("leadSnapshot", "Lead Snapshot")}</h4>
@@ -2225,11 +2509,53 @@ function renderLeadDrawer(lead) {
       ${fieldRow(getFieldLabel("channel", "Channel"), displayChannel(lead.channel))}
       ${fieldRow(getFieldLabel("score", "Score"), lead.lead_score)}
       ${fieldRow(getFieldLabel("painSignal", "Pain Signal"), lead.pain_signal)}
-      ${fieldRow(copy().meta.lang === "ar" ? "الحالة التشغيلية" : "Operational state", lead.operational_state || "active")}
+      ${fieldRow(copy().meta.lang === "ar" ? "الحالة التشغيلية" : "Operational state", getLeadOperationalStateLabel(effectiveOperationalState))}
+      ${fieldRow(copy().meta.lang === "ar" ? "أول تواصل" : "First touch", lead.first_touch_at ? shortDate(getLeadFirstTouchDate(lead)) : (copy().meta.lang === "ar" ? "لم يتم بعد" : "Not done yet"))}
+      ${fieldRow(copy().meta.lang === "ar" ? "استحقاق المتابعة" : "Follow-up due", followUpDueDate ? shortDate(followUpDueDate) : (copy().meta.lang === "ar" ? "غير محدد" : "Not scheduled"))}
+      ${fieldRow(copy().meta.lang === "ar" ? "آخر متابعة" : "Last follow-up", lead.follow_up_sent_at ? shortDate(getLeadFollowUpSentDate(lead)) : (copy().meta.lang === "ar" ? "لا يوجد" : "None yet"))}
+      ${fieldRow(copy().meta.lang === "ar" ? "تم الرد" : "Responded", lead.responded_at ? shortDate(getLeadRespondedDate(lead)) : (copy().meta.lang === "ar" ? "لا يوجد" : "Not yet"))}
       ${fieldRow(getFieldLabel("interestType", "Interest Type"), displayInterestType(lead.interest_type))}
       ${fieldRow(getFieldLabel("currentStage", "Current Stage"), displayStage(computedStage))}
       ${fieldRow(getFieldLabel("shortNote", "Short Note"), lead.notes)}
       ${fieldRow(getFieldLabel("handoffSummary", "Handoff Summary"), lead.handoff_summary || getValueLabel("notReadyYet", "Not ready yet"))}
+    </section>
+    <section class="drawer-section">
+      <h4>${copy().meta.lang === "ar" ? "الخطوة التنفيذية التالية" : "Next Execution Step"}</h4>
+      <div class="progression-card">
+        <p>${
+          needsFirstTouch
+            ? (copy().meta.lang === "ar"
+                ? "هذه الجهة التُقطت لكن ما زالت بلا أول تواصل. لا تتركها معلقة: أضف opener سريع أو سجّل أول تواصل فورًا."
+                : "This lead was captured but still has no first touch. Do not leave it hanging: add a quick opener or log the first touch now.")
+            : effectiveOperationalState === "needs_follow_up"
+              ? (copy().meta.lang === "ar"
+                  ? (followUpTiming === "overdue"
+                      ? "هذه الجهة متأخرة في المتابعة. أرسل follow-up الآن أو snooze بشكل مقصود."
+                      : "هذه الجهة تحتاج متابعة اليوم. نفّذ follow-up الآن أو أجّلها بوضوح.")
+                  : (followUpTiming === "overdue"
+                      ? "This lead is overdue for follow-up. Send the follow-up now or snooze it deliberately."
+                      : "This lead needs follow-up today. Send the follow-up now or snooze it clearly."))
+            : lead.operational_state === "first_touch_done"
+              ? (copy().meta.lang === "ar"
+                  ? "تم أول تواصل. إذا أُرسلت المحاولة بالفعل، حرّكها إلى انتظار الرد."
+                  : "First touch is done. If the opener has been sent, move it into waiting response.")
+              : effectiveOperationalState === "waiting_response"
+                ? (copy().meta.lang === "ar"
+                    ? "هذه الجهة الآن بانتظار الرد. راقب الردود أو جهّز متابعة عند الحاجة."
+                    : "This lead is now waiting for a response. Watch for replies or prep follow-up when needed.")
+                : (copy().meta.lang === "ar"
+                    ? "اختر الحركة التالية التي تبقي هذا السجل متقدّمًا اليوم."
+                    : "Choose the next action that keeps this lead moving today.")
+        }</p>
+        <div class="guidance-actions">
+          ${needsFirstTouch ? `<button class="success-button tight" type="button" data-mark-first-touch="${lead.id}">${copy().meta.lang === "ar" ? "تم أول تواصل" : "Mark first touch done"}</button>` : ""}
+          ${effectiveOperationalState !== "waiting_response" && effectiveOperationalState !== "needs_follow_up" && effectiveOperationalState !== "responded" ? `<button class="ghost-button tight" type="button" data-mark-waiting-response="${lead.id}">${copy().meta.lang === "ar" ? "بانتظار الرد" : "Move to waiting response"}</button>` : ""}
+          ${(effectiveOperationalState === "waiting_response" || effectiveOperationalState === "needs_follow_up") ? `<button class="success-button tight" type="button" data-mark-follow-up-sent="${lead.id}">${copy().meta.lang === "ar" ? "تمت المتابعة" : "Mark follow-up sent"}</button>` : ""}
+          ${(effectiveOperationalState === "waiting_response" || effectiveOperationalState === "needs_follow_up") ? `<button class="ghost-button tight" type="button" data-snooze-follow-up="${lead.id}">${copy().meta.lang === "ar" ? "تأجيل المتابعة" : "Snooze follow-up"}</button>` : ""}
+          ${effectiveOperationalState !== "responded" ? `<button class="ghost-button tight" type="button" data-mark-responded="${lead.id}">${copy().meta.lang === "ar" ? "تم الرد" : "Mark responded"}</button>` : ""}
+          <button class="ghost-button tight" type="button" data-open-opener="${lead.id}">${copy().meta.lang === "ar" ? "أضف opener note" : "Add opener note"}</button>
+        </div>
+      </div>
     </section>
     ${
       lead.current_stage === "Handoff Sent" || linkedOpportunity
@@ -2582,6 +2908,10 @@ async function saveLeadForm(form) {
   patch.role = existing.role;
   patch.channel = existing.channel;
   patch.sector_id = existing.sector_id;
+  patch.first_touch_at = existing.first_touch_at || "";
+  patch.follow_up_due_at = existing.follow_up_due_at || "";
+  patch.follow_up_sent_at = existing.follow_up_sent_at || "";
+  patch.responded_at = existing.responded_at || "";
   const errors = [
     ...localizeMessages(getRequiredValidationErrors("lead", patch)),
     ...localizeMessages(validateLeadTransition(patch, patch.current_stage)),
@@ -2687,6 +3017,10 @@ async function createEntity(entityType, form) {
       handoff_summary: "",
       archived: false,
       operational_state: "active",
+      first_touch_at: "",
+      follow_up_due_at: "",
+      follow_up_sent_at: "",
+      responded_at: "",
       stage_updated_at: todayDate(),
       created_at: todayDate(),
       updated_at: todayDate(),
@@ -2799,6 +3133,10 @@ async function createQuickLead(form) {
     handoff_summary: "",
     archived: false,
     operational_state: "captured_today",
+    first_touch_at: "",
+    follow_up_due_at: "",
+    follow_up_sent_at: "",
+    responded_at: "",
     stage_updated_at: todayDate(),
     created_at: todayDate(),
     updated_at: todayDate(),
@@ -2883,6 +3221,154 @@ async function moveLeadToOutreach(leadId) {
       copy().meta.lang === "ar"
         ? `${updatedLead.company_name} أصبحت الآن ضمن outreach. افتحها إذا أردت إضافة opener note قبل الإرسال.`
         : `${updatedLead.company_name} is now in outreach. Open it if you want to add an opener note before sending.`,
+    action: {
+      type: "open-record",
+      entityType: "lead",
+      entityId: leadId,
+      label: copy().meta.lang === "ar" ? "افتح الجهة" : "Open lead",
+    },
+  });
+  renderApp();
+}
+
+async function markLeadFirstTouchDone(leadId) {
+  const lead = state.data.leads.find((item) => item.id === leadId);
+  if (!lead) {
+    return;
+  }
+
+  await patchEntity("lead", leadId, {
+    operational_state: "first_touch_done",
+    first_touch_at: todayDate(),
+    next_step: lead.next_step || (copy().meta.lang === "ar" ? "انتظار الرد أو تحديد follow-up" : "Wait for response or set a follow-up"),
+    next_step_date: lead.next_step_date || todayDate(),
+  }, copy().meta.lang === "ar" ? "تم تسجيل أول تواصل." : "First touch marked as done.");
+
+  state.recentCaptureLeadId = leadId;
+  setGuidance({
+    message:
+      copy().meta.lang === "ar"
+        ? `${lead.company_name} تم أول تواصل معها. إذا أُرسلت الرسالة بالفعل، انقلها الآن إلى انتظار الرد.`
+        : `${lead.company_name} has its first touch logged. If the opener was sent, move it into waiting response now.`,
+    action: {
+      type: "open-record",
+      entityType: "lead",
+      entityId: leadId,
+      label: copy().meta.lang === "ar" ? "افتح الجهة" : "Open lead",
+    },
+  });
+  renderApp();
+}
+
+async function moveLeadToWaitingResponse(leadId) {
+  const lead = state.data.leads.find((item) => item.id === leadId);
+  if (!lead) {
+    return;
+  }
+
+  await patchEntity("lead", leadId, {
+    operational_state: "waiting_response",
+    first_touch_at: lead.first_touch_at || todayDate(),
+    follow_up_due_at: lead.follow_up_due_at || shiftDate(todayDate(), 2),
+    next_step: lead.next_step || (copy().meta.lang === "ar" ? "متابعة الرد" : "Follow the response"),
+    next_step_date: lead.next_step_date || todayDate(),
+  }, copy().meta.lang === "ar" ? "الجهة الآن بانتظار الرد." : "Lead moved to waiting response.");
+
+  state.recentCaptureLeadId = leadId;
+  setGuidance({
+    message:
+      copy().meta.lang === "ar"
+        ? `${lead.company_name} أصبحت الآن بانتظار الرد. راقب الردود أو جهّز متابعة عند الحاجة.`
+        : `${lead.company_name} is now waiting for a response. Watch for replies or prepare a follow-up if needed.`,
+    action: {
+      type: "open-record",
+      entityType: "lead",
+      entityId: leadId,
+      label: copy().meta.lang === "ar" ? "افتح الجهة" : "Open lead",
+    },
+  });
+  renderApp();
+}
+
+async function markLeadFollowUpSent(leadId) {
+  const lead = state.data.leads.find((item) => item.id === leadId);
+  if (!lead) {
+    return;
+  }
+
+  await patchEntity("lead", leadId, {
+    operational_state: "waiting_response",
+    first_touch_at: lead.first_touch_at || todayDate(),
+    follow_up_sent_at: todayDate(),
+    follow_up_due_at: shiftDate(todayDate(), 2),
+    next_step: copy().meta.lang === "ar" ? "انتظار الرد بعد المتابعة" : "Wait for response after follow-up",
+    next_step_date: shiftDate(todayDate(), 2),
+  }, copy().meta.lang === "ar" ? "تم تسجيل المتابعة." : "Follow-up marked as sent.");
+
+  state.recentCaptureLeadId = leadId;
+  setGuidance({
+    message:
+      copy().meta.lang === "ar"
+        ? `${lead.company_name} تمت متابعتها. راقب الرد أو راجعها مجددًا عند موعد المتابعة القادم.`
+        : `${lead.company_name} has a follow-up logged. Watch for a response or revisit it on the next due date.`,
+    action: {
+      type: "open-record",
+      entityType: "lead",
+      entityId: leadId,
+      label: copy().meta.lang === "ar" ? "افتح الجهة" : "Open lead",
+    },
+  });
+  renderApp();
+}
+
+async function snoozeLeadFollowUp(leadId) {
+  const lead = state.data.leads.find((item) => item.id === leadId);
+  if (!lead) {
+    return;
+  }
+
+  const nextDueDate = shiftDate(getLeadFollowUpDueDate(lead) || todayDate(), 1);
+  await patchEntity("lead", leadId, {
+    operational_state: "waiting_response",
+    follow_up_due_at: nextDueDate,
+    next_step: copy().meta.lang === "ar" ? "متابعة مؤجلة بوضوح" : "Follow-up intentionally snoozed",
+    next_step_date: nextDueDate,
+  }, copy().meta.lang === "ar" ? "تم تأجيل المتابعة." : "Follow-up snoozed.");
+
+  setGuidance({
+    message:
+      copy().meta.lang === "ar"
+        ? `${lead.company_name} أُجلت متابعتها إلى ${shortDate(nextDueDate)}.`
+        : `${lead.company_name} follow-up was snoozed to ${shortDate(nextDueDate)}.`,
+    action: {
+      type: "open-record",
+      entityType: "lead",
+      entityId: leadId,
+      label: copy().meta.lang === "ar" ? "افتح الجهة" : "Open lead",
+    },
+  });
+  renderApp();
+}
+
+async function markLeadResponded(leadId) {
+  const lead = state.data.leads.find((item) => item.id === leadId);
+  if (!lead) {
+    return;
+  }
+
+  await patchEntity("lead", leadId, {
+    operational_state: "responded",
+    responded_at: todayDate(),
+    follow_up_due_at: "",
+    next_step: copy().meta.lang === "ar" ? "راجع الرد وحدد الخطوة التالية" : "Review the response and set the next step",
+    next_step_date: todayDate(),
+  }, copy().meta.lang === "ar" ? "تم تسجيل الرد." : "Lead marked as responded.");
+
+  setGuidance({
+    message:
+      copy().meta.lang === "ar"
+        ? `${lead.company_name} تم الرد منها. راجع الرد وحدد الحركة التالية بسرعة.`
+        : `${lead.company_name} has responded. Review the reply and define the next move quickly.`,
     action: {
       type: "open-record",
       entityType: "lead",
@@ -2979,6 +3465,56 @@ function bindDrawerActions() {
     });
   });
 
+  elements.drawerBody.querySelectorAll("[data-mark-first-touch]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await markLeadFirstTouchDone(button.dataset.markFirstTouch);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
+  });
+
+  elements.drawerBody.querySelectorAll("[data-mark-waiting-response]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await moveLeadToWaitingResponse(button.dataset.markWaitingResponse);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
+  });
+
+  elements.drawerBody.querySelectorAll("[data-mark-follow-up-sent]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await markLeadFollowUpSent(button.dataset.markFollowUpSent);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
+  });
+
+  elements.drawerBody.querySelectorAll("[data-snooze-follow-up]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await snoozeLeadFollowUp(button.dataset.snoozeFollowUp);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
+  });
+
+  elements.drawerBody.querySelectorAll("[data-mark-responded]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await markLeadResponded(button.dataset.markResponded);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
+  });
+
   elements.drawerBody.querySelectorAll("[data-sector-select]").forEach((select) => {
     const note = elements.drawerBody.querySelector("[data-sector-note]");
     const updateSectorNote = () => {
@@ -3042,6 +3578,36 @@ function bindRecordOpeners() {
     button.addEventListener("click", async () => {
       try {
         await moveLeadToOutreach(button.dataset.moveOutreach);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
+  });
+
+  elements.content.querySelectorAll("[data-mark-first-touch]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await markLeadFirstTouchDone(button.dataset.markFirstTouch);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
+  });
+
+  elements.content.querySelectorAll("[data-mark-waiting-response]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await moveLeadToWaitingResponse(button.dataset.markWaitingResponse);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
+  });
+
+  elements.content.querySelectorAll("[data-mark-follow-up-sent]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await markLeadFollowUpSent(button.dataset.markFollowUpSent);
       } catch {
         // Notice is already set by the mutation helper.
       }

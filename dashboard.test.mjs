@@ -150,6 +150,10 @@ test("normalization backfills lightweight source targets and archived lead state
 
   assert.equal(normalized.leads[0].archived, false);
   assert.equal(normalized.leads[0].operational_state, "active");
+  assert.equal(normalized.leads[0].first_touch_at, "");
+  assert.equal(normalized.leads[0].follow_up_due_at, "");
+  assert.equal(normalized.leads[0].follow_up_sent_at, "");
+  assert.equal(normalized.leads[0].responded_at, "");
   assert.equal(normalized.weeklyFocus.source_targets.LinkedIn, 2);
   assert.equal(normalized.weeklyFocus.source_targets.WhatsApp, 3);
 });
