@@ -2852,6 +2852,7 @@ function renderDrawer() {
   const { open, kind, entityType, entityId, message } = state.drawer;
   elements.drawer.classList.toggle("hidden", !open);
   elements.drawerBackdrop.classList.toggle("hidden", !open);
+  elements.drawer.classList.remove("drawer-modal", "drawer-lead-detail");
 
   if (!open) {
     elements.drawerBody.innerHTML = "";
@@ -2880,6 +2881,7 @@ function renderDrawer() {
     title = lead?.company_name || getValueLabel("lead", "Lead");
     kicker = copy().chrome.sections.pipeline;
     content = renderLeadDrawer(lead);
+    elements.drawer.classList.add("drawer-modal", "drawer-lead-detail");
   }
 
   if (entityType === "opportunity" && entityId) {
