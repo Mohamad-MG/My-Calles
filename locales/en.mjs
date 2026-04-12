@@ -37,14 +37,14 @@ const enLocale = {
       no: "No",
     },
     storage: {
-      savedLocally: (time) => `Saved locally ${time}`,
-      localLoaded: "Local data loaded",
-      seedMode: "Seed restored",
+      savedLocally: (time) => `Saved ${time}`,
+      localLoaded: "Saved",
+      seedMode: "Sample data restored",
       memoryOnly: "Storage unavailable",
     },
     buttons: {
       restoreSeed: "Restore Seed",
-      resetLocal: "Reset Shared State",
+      resetLocal: "Reset local data",
       newSector: "New Sector",
       newLead: "New Lead",
       newOpportunity: "New Opportunity",
@@ -299,8 +299,8 @@ const enLocale = {
   messages: {
     notices: {
       recoveredSeed: "Saved state was invalid, so the dashboard recovered to a safe seed state.",
-      seedRestored: "Seed data restored to shared state.",
-      localCleared: "Shared state reset to a fresh seed snapshot.",
+      seedRestored: "Sample data restored.",
+      localCleared: "Local data reset to a fresh sample snapshot.",
       serverUnavailable: "Shared backend is unavailable. Showing temporary local seed data.",
       activeSectorUpdated: "Active sector updated. New lead capture should stay focused there.",
       sectorUpdated: "Sector updated successfully.",

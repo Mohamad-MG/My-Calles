@@ -120,15 +120,10 @@ function getOpportunityCreateErrors(state, draft) {
 }
 
 function getLeadCreateErrors(state, draft) {
-  const errors = [
+  return [
     ...getRequiredValidationErrors("lead", draft),
     ...validateLeadTransition(draft, draft.current_stage),
   ];
-  const sector = state.sectors.find((item) => item.id === draft.sector_id);
-  if (!sector?.is_active) {
-    errors.push("Agent 2 can only create new leads for the active sector.");
-  }
-  return errors;
 }
 
 function getSectorPatchState(state, id, patch) {

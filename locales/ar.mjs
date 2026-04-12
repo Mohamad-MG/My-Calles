@@ -38,14 +38,14 @@ const arLocale = {
       no: "لا",
     },
     storage: {
-      savedLocally: (time) => `تمت مزامنة الحالة المشتركة ${time}`,
-      localLoaded: "تم تحميل الحالة المشتركة",
+      savedLocally: (time) => `محفوظ ${time}`,
+      localLoaded: "محفوظ",
       seedMode: "تم استرجاع البيانات التجريبية",
-      memoryOnly: "الخادم غير متاح",
+      memoryOnly: "تعذر التخزين",
     },
     buttons: {
       restoreSeed: "استرجاع البيانات التجريبية",
-      resetLocal: "إعادة ضبط الحالة المشتركة",
+      resetLocal: "إعادة ضبط البيانات المحلية",
       newSector: "قطاع جديد",
       newLead: "جهة جديدة",
       newOpportunity: "فرصة جديدة",
@@ -300,8 +300,8 @@ const arLocale = {
   messages: {
     notices: {
       recoveredSeed: "الحالة المحفوظة كانت غير صالحة، لذلك عادت اللوحة إلى بيانات آمنة.",
-      seedRestored: "تم استرجاع البيانات التجريبية داخل الحالة المشتركة.",
-      localCleared: "تمت إعادة ضبط الحالة المشتركة إلى نسخة بداية جديدة.",
+      seedRestored: "تم استرجاع البيانات التجريبية.",
+      localCleared: "تمت إعادة ضبط البيانات المحلية إلى نسخة بداية جديدة.",
       serverUnavailable: "الخادم المشترك غير متاح حاليًا. يتم عرض بيانات بداية مؤقتة.",
       activeSectorUpdated: "تم تحديث القطاع النشط. يجب أن يظل إدخال الجهات الجديدة مركزًا عليه.",
       sectorUpdated: "تم تحديث القطاع بنجاح.",

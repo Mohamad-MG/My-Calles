@@ -140,6 +140,20 @@ test("normalization fills missing collections safely", () => {
   assert.equal(normalized.sectors.filter((sector) => sector.is_active).length, 1);
 });
 
+test("normalization backfills lightweight source targets and archived lead state", () => {
+  const normalized = normalizeDashboardState({
+    weeklyFocus: { week: "2026-W16" },
+    sectors: [{ id: "s1", sector_name: "قطاع", status: "Active", is_active: true }],
+    leads: [{ id: "l1", company_name: "شركة", sector_id: "s1", contact_name: "أحمد", channel: "LinkedIn", current_stage: "New", next_step: "راجع", next_step_date: "2026-04-12" }],
+    opportunities: [],
+  });
+
+  assert.equal(normalized.leads[0].archived, false);
+  assert.equal(normalized.leads[0].operational_state, "active");
+  assert.equal(normalized.weeklyFocus.source_targets.LinkedIn, 2);
+  assert.equal(normalized.weeklyFocus.source_targets.WhatsApp, 3);
+});
+
 test("normalization preserves no-active-sector state instead of inventing one", () => {
   const normalized = normalizeDashboardState({
     weeklyFocus: { week: "2026-W16", active_sector_id: "" },

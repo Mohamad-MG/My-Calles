@@ -59,14 +59,14 @@ const FALLBACK_COPY = {
       no: "No",
     },
     storage: {
-      savedLocally: (time) => `Saved locally ${time}`,
-      localLoaded: "Local state loaded",
-      seedMode: "Seed mode",
-      memoryOnly: "Memory only",
+      savedLocally: (time) => `Saved ${time}`,
+      localLoaded: "Saved",
+      seedMode: "Sample data restored",
+      memoryOnly: "Storage unavailable",
     },
     buttons: {
       restoreSeed: "Restore Seed",
-      resetLocal: "Reset Local",
+      resetLocal: "Reset local data",
       newSector: "New Sector",
       newLead: "New Lead",
       newOpportunity: "New Opportunity",
@@ -144,6 +144,7 @@ const state = {
     overdue: "all",
     source: "all",
     focus: "all",
+    archived: "hidden",
   },
   drawer: {
     open: false,
@@ -163,10 +164,11 @@ const state = {
     snapshot: "",
     version: 0,
   },
+  recentCaptureLeadId: "",
 };
 
 let elements = null;
-const DEBUG_VALIDATION = new URLSearchParams(window.location.search).has("debug");
+const DEBUG_MODE = new URLSearchParams(window.location.search).has("debug");
 
 function copy() {
   return state.copy || FALLBACK_COPY;
@@ -475,18 +477,24 @@ async function mutateState(path, { body, message = "" } = {}) {
   const segments = path.replace(/^\//, "").split("/");
   const collection = segments[0];
   const id = segments[1];
+  const mutationDate = todayDate();
 
   if (!id) {
     // POST create — body is the new entity
-    if (collection === "sectors") state.data.sectors.push(body);
-    else if (collection === "leads") state.data.leads.push(body);
-    else if (collection === "opportunities") state.data.opportunities.push(body);
+    const payload = {
+      ...body,
+      created_at: body?.created_at || mutationDate,
+      updated_at: mutationDate,
+    };
+    if (collection === "sectors") state.data.sectors.push(payload);
+    else if (collection === "leads") state.data.leads.push(payload);
+    else if (collection === "opportunities") state.data.opportunities.push(payload);
   } else if (collection === "sectors") {
-    state.data.sectors = state.data.sectors.map((s) => s.id === id ? { ...s, ...body } : s);
+    state.data.sectors = state.data.sectors.map((s) => (s.id === id ? { ...s, ...body, updated_at: mutationDate } : s));
   } else if (collection === "leads") {
-    state.data.leads = state.data.leads.map((l) => l.id === id ? { ...l, ...body } : l);
+    state.data.leads = state.data.leads.map((l) => (l.id === id ? { ...l, ...body, updated_at: mutationDate } : l));
   } else if (collection === "opportunities") {
-    state.data.opportunities = state.data.opportunities.map((o) => o.id === id ? { ...o, ...body } : o);
+    state.data.opportunities = state.data.opportunities.map((o) => (o.id === id ? { ...o, ...body, updated_at: mutationDate } : o));
   } else if (path === "/state/restore-seed" || path === "/state/reset-shared") {
     state.data = normalizeDashboardState(getSeedData());
   }
@@ -504,10 +512,6 @@ async function resetToSeed({ clearStorage = false } = {}) {
     ? (copy().messages.notices.localCleared || "State cleared.")
     : (copy().messages.notices.seedRestored || "Seed restored.");
   setNotice(message);
-}
-
-function startStateSync() {
-  // No server — nothing to sync
 }
 
 function formatDate(dateValue) {
@@ -575,12 +579,119 @@ function getLeadById(leadId) {
   return state.data.leads.find((lead) => lead.id === leadId);
 }
 
+function isLeadArchived(lead) {
+  return Boolean(lead?.archived);
+}
+
+function shouldShowArchivedLeads() {
+  return state.filters.archived === "show";
+}
+
+function matchesArchivedVisibility(lead) {
+  return shouldShowArchivedLeads() || !isLeadArchived(lead);
+}
+
+function getDefaultSourceTarget(source) {
+  const defaults = {
+    WhatsApp: 3,
+    Call: 2,
+    LinkedIn: 2,
+    Email: 2,
+    Google: 1,
+    Instagram: 2,
+    TikTok: 1,
+    YouTube: 1,
+    "Competitor Comments": 1,
+  };
+
+  return defaults[source] ?? 1;
+}
+
+function getSourceTargetMap() {
+  const configured = state.data.weeklyFocus?.source_targets || {};
+  return getChannelOptions().reduce((accumulator, source) => {
+    accumulator[source] = Number(configured[source] ?? getDefaultSourceTarget(source));
+    return accumulator;
+  }, {});
+}
+
+function getSourceDailyTarget(source) {
+  return Math.max(0, Number(getSourceTargetMap()[source] ?? getDefaultSourceTarget(source)));
+}
+
+function getTargetStatus(todayCaptured, dailyTarget) {
+  if (dailyTarget <= 0 || todayCaptured >= dailyTarget) {
+    return "done";
+  }
+
+  const now = new Date();
+  const elapsedRatio = Math.min(1, ((now.getHours() * 60) + now.getMinutes()) / (24 * 60));
+  const completionRatio = todayCaptured / dailyTarget;
+  return completionRatio >= Math.max(0.2, elapsedRatio - 0.2) ? "on_track" : "behind";
+}
+
+function getSourceTargetProgress(source, todayCaptured = 0) {
+  const dailyTarget = getSourceDailyTarget(source);
+  const remainingToTarget = Math.max(0, dailyTarget - todayCaptured);
+  const targetStatus = getTargetStatus(todayCaptured, dailyTarget);
+  const warning = targetStatus === "behind" && remainingToTarget > 0
+    ? (copy().meta.lang === "ar"
+        ? `نحتاج ${remainingToTarget} جهة إضافية من ${displayChannel(source)} اليوم`
+        : `Need ${remainingToTarget} more leads from ${displayChannel(source)} today`)
+    : "";
+
+  return {
+    todayCaptured,
+    dailyTarget,
+    remainingToTarget,
+    targetStatus,
+    warning,
+  };
+}
+
+function getSourceActionPrompt(source, metrics) {
+  if (!metrics.todayCaptured) {
+    return copy().meta.lang === "ar"
+      ? `لا يوجد التقاط اليوم بعد — ابدأ بـ 5 جهات جديدة داخل ${displayChannel(source)}`
+      : `No captures yet today — start with 5 fresh profiles in ${displayChannel(source)}`;
+  }
+
+  if (metrics.targetStatus === "behind" && metrics.remainingToTarget > 0) {
+    return copy().meta.lang === "ar"
+      ? `نحتاج ${metrics.remainingToTarget} جهة إضافية — نفّذ دورة التقاط سريعة الآن`
+      : `Need ${metrics.remainingToTarget} more leads — run one quick capture cycle now`;
+  }
+
+  if (metrics.targetStatus === "done") {
+    return copy().meta.lang === "ar"
+      ? "تم الوصول للهدف — حوّل الجهد الآن إلى الردود أو التأهيل"
+      : "Target reached — shift to follow-up or qualification";
+  }
+
+  return copy().meta.lang === "ar"
+    ? `القناة على المسار — أكمل دورة التقاط واحدة ثم ارجع للردود`
+    : "On track — complete one more capture cycle, then shift into follow-up";
+}
+
+function renderTargetStatusBadge(status) {
+  const labels = {
+    done: copy().meta.lang === "ar" ? "مكتمل" : "Done",
+    on_track: copy().meta.lang === "ar" ? "على المسار" : "On track",
+    behind: copy().meta.lang === "ar" ? "متأخر" : "Behind",
+  };
+
+  return `<span class="badge target-${status}">${labels[status] || status}</span>`;
+}
+
 function getChannelOptions() {
   const seeded = Object.keys(copy()?.display?.channels || {});
   const live = [
-    ...state.data.leads.map((lead) => lead.channel).filter(Boolean),
+    ...state.data.leads.filter((lead) => !isLeadArchived(lead)).map((lead) => lead.channel).filter(Boolean),
     ...state.data.opportunities
-      .map((opportunity) => getLeadById(opportunity.origin_lead_id)?.channel)
+      .map((opportunity) => {
+        const originLead = getLeadById(opportunity.origin_lead_id);
+        return isLeadArchived(originLead) ? "" : originLead?.channel;
+      })
       .filter(Boolean),
   ];
   return [...new Set([...seeded, ...live])];
@@ -588,10 +699,12 @@ function getChannelOptions() {
 
 function getAvailableSources() {
   return getChannelOptions().filter((channel) =>
-    state.data.leads.some((lead) => lead.channel === channel) ||
-    state.data.opportunities.some(
-      (opportunity) => getLeadById(opportunity.origin_lead_id)?.channel === channel,
-    ),
+    getSourceDailyTarget(channel) > 0 ||
+    state.data.leads.some((lead) => !isLeadArchived(lead) && lead.channel === channel) ||
+    state.data.opportunities.some((opportunity) => {
+      const originLead = getLeadById(opportunity.origin_lead_id);
+      return !isLeadArchived(originLead) && originLead?.channel === channel;
+    })
   );
 }
 
@@ -625,17 +738,71 @@ function ensureActiveSource() {
   return sources;
 }
 
-function getActiveSource() {
+function resolveActiveSource() {
   const screenSource = getScreenSource();
   if (screenSource) {
-    state.activeSource = screenSource;
     return screenSource;
   }
-  ensureActiveSource();
-  return state.activeSource;
+
+  const sources = getAvailableSources();
+  if (!sources.length) {
+    return "all";
+  }
+
+  return sources.includes(state.activeSource) ? state.activeSource : sources[0];
+}
+
+function getLeadCapturedDate(lead) {
+  return typeof lead.created_at === "string" ? lead.created_at.slice(0, 10) : "";
+}
+
+function sourceMatchesAnalysisFilters(source) {
+  return state.filters.source === "all" || source === state.filters.source;
+}
+
+function leadMatchesAnalysisFilters(lead) {
+  if (!matchesArchivedVisibility(lead)) {
+    return false;
+  }
+
+  const today = todayDate();
+  const computedStage = getComputedLeadStage(lead, today);
+  const sector = getSectorById(lead.sector_id);
+  const matchesSector = state.filters.sector === "all" || sector?.id === state.filters.sector;
+  const matchesSource = sourceMatchesAnalysisFilters(lead.channel);
+  const isOverdue = computedStage === "Delayed";
+  const matchesOverdue =
+    state.filters.overdue === "all" ||
+    (state.filters.overdue === "yes" && isOverdue) ||
+    (state.filters.overdue === "no" && !isOverdue);
+
+  return matchesSector && matchesSource && matchesOverdue;
+}
+
+function opportunityMatchesAnalysisFilters(opportunity) {
+  const today = todayDate();
+  const computedStage = getComputedOpportunityStage(opportunity, today);
+  const originLead = getLeadById(opportunity.origin_lead_id);
+  if (!matchesArchivedVisibility(originLead)) {
+    return false;
+  }
+  const sector = getSectorById(opportunity.sector_id);
+  const matchesSector = state.filters.sector === "all" || sector?.id === state.filters.sector;
+  const matchesSource = sourceMatchesAnalysisFilters(originLead?.channel || "");
+  const isOverdue = computedStage === "Delayed";
+  const matchesOverdue =
+    state.filters.overdue === "all" ||
+    (state.filters.overdue === "yes" && isOverdue) ||
+    (state.filters.overdue === "no" && !isOverdue);
+
+  return matchesSector && matchesSource && matchesOverdue;
 }
 
 function leadMatchesCommonFilters(lead) {
+  if (!matchesArchivedVisibility(lead)) {
+    return false;
+  }
+
   const today = todayDate();
   const computedStage = getComputedLeadStage(lead, today);
   const sector = getSectorById(lead.sector_id);
@@ -656,6 +823,10 @@ function leadMatchesCommonFilters(lead) {
 function opportunityMatchesCommonFilters(opportunity) {
   const today = todayDate();
   const computedStage = getComputedOpportunityStage(opportunity, today);
+  const originLead = getLeadById(opportunity.origin_lead_id);
+  if (!matchesArchivedVisibility(originLead)) {
+    return false;
+  }
   const sector = getSectorById(opportunity.sector_id);
   const matchesSector =
     state.filters.sector === "all" || sector?.id === state.filters.sector;
@@ -673,13 +844,13 @@ function opportunityMatchesCommonFilters(opportunity) {
   return matchesSector && matchesStage && matchesUrgency && matchesOverdue;
 }
 
-function getSourceLeads(source = getActiveSource()) {
+function getSourceLeads(source = resolveActiveSource()) {
   return state.data.leads.filter(
     (lead) => lead.channel === source && leadMatchesCommonFilters(lead),
   );
 }
 
-function getSourceOpportunities(source = getActiveSource()) {
+function getSourceOpportunities(source = resolveActiveSource()) {
   return state.data.opportunities.filter((opportunity) => {
     const originLead = getLeadById(opportunity.origin_lead_id);
     return (
@@ -689,9 +860,11 @@ function getSourceOpportunities(source = getActiveSource()) {
   });
 }
 
-function getSourceMetrics(source = getActiveSource()) {
+function getSourceMetrics(source = resolveActiveSource()) {
   const leads = getSourceLeads(source);
   const opportunities = getSourceOpportunities(source);
+  const today = todayDate();
+  const todayCaptured = leads.filter((lead) => getLeadCapturedDate(lead) === today).length;
   const readyForHandoff = leads.filter(
     (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Ready for Handoff",
   ).length;
@@ -699,6 +872,8 @@ function getSourceMetrics(source = getActiveSource()) {
     (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Needs Reply",
   ).length;
   return {
+    ...getSourceTargetProgress(source, todayCaptured),
+    todayLeads: todayCaptured,
     leads: leads.length,
     needsReply,
     readyForHandoff,
@@ -706,19 +881,43 @@ function getSourceMetrics(source = getActiveSource()) {
   };
 }
 
-function getFilteredLeads() {
-  return getSourceLeads();
+function getAnalysisSourceLeads(source) {
+  return state.data.leads.filter(
+    (lead) => lead.channel === source && leadMatchesAnalysisFilters(lead),
+  );
 }
 
-function getFilteredOpportunities() {
-  return getSourceOpportunities();
+function getAnalysisSourceOpportunities(source) {
+  return state.data.opportunities.filter((opportunity) => {
+    const originLead = getLeadById(opportunity.origin_lead_id);
+    return originLead?.channel === source && opportunityMatchesAnalysisFilters(opportunity);
+  });
+}
+
+function getAnalysisSourceMetrics(source) {
+  const today = todayDate();
+  const leads = getAnalysisSourceLeads(source);
+  const opportunities = getAnalysisSourceOpportunities(source);
+  const todayCaptured = leads.filter((lead) => getLeadCapturedDate(lead) === today).length;
+  return {
+    ...getSourceTargetProgress(source, todayCaptured),
+    todayLeads: todayCaptured,
+    leads: leads.length,
+    needsReply: leads.filter(
+      (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Needs Reply",
+    ).length,
+    readyForHandoff: leads.filter(
+      (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Ready for Handoff",
+    ).length,
+    opportunities: opportunities.length,
+  };
 }
 
 function getFilteredSectors() {
   const today = todayDate();
   return state.data.sectors.filter((sector) => {
     const computedStatus = getComputedSectorStatus(sector, today);
-    const activeSource = getActiveSource();
+    const activeSource = resolveActiveSource();
     const hasSourceLead =
       state.data.leads.some((lead) => lead.sector_id === sector.id && lead.channel === activeSource);
     const matchesSector =
@@ -759,14 +958,21 @@ function getAllLeads() {
 
 function getAnalysisMetrics() {
   const today = todayDate();
-  const leads = state.data.leads;
+  const leads = state.data.leads.filter((lead) => leadMatchesAnalysisFilters(lead));
   const openOpportunities = state.data.opportunities.filter((opportunity) => {
+    if (!opportunityMatchesAnalysisFilters(opportunity)) {
+      return false;
+    }
     const stage = getComputedOpportunityStage(opportunity, today);
     return !["Won", "Lost"].includes(stage);
   });
 
+  const sourceProgress = ensureActiveSource()
+    .filter((source) => sourceMatchesAnalysisFilters(source))
+    .map((source) => getAnalysisSourceMetrics(source));
+
   return {
-    newToday: leads.filter((lead) => lead.created_at === today).length,
+    newToday: leads.filter((lead) => getLeadCapturedDate(lead) === today).length,
     needsContact: leads.filter((lead) => {
       const bucket = getLeadWorkflowBucket(lead, state.data.opportunities);
       return ["New", "Needs Extraction", "Needs Reply"].includes(bucket);
@@ -775,25 +981,35 @@ function getAnalysisMetrics() {
       (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Ready for Handoff",
     ).length,
     openOpportunities: openOpportunities.length,
+    targetDone: sourceProgress.filter((item) => item.targetStatus === "done").length,
+    remainingToTarget: sourceProgress.reduce((total, item) => total + item.remainingToTarget, 0),
   };
 }
 
 function getSourcePriorityRows() {
   return ensureActiveSource()
+    .filter((source) => sourceMatchesAnalysisFilters(source))
     .map((source) => {
-      const metrics = getSourceMetrics(source);
+      const metrics = getAnalysisSourceMetrics(source);
       return {
         source,
         metrics,
-        score: metrics.readyForHandoff * 3 + metrics.needsReply * 2 + metrics.leads,
+        score: metrics.readyForHandoff * 3 + metrics.needsReply * 2 + metrics.todayLeads * 2 + metrics.leads,
       };
     })
-    .sort((left, right) => right.score - left.score || right.metrics.leads - left.metrics.leads);
+    .sort((left, right) => right.score - left.score || right.metrics.todayLeads - left.metrics.todayLeads || right.metrics.leads - left.metrics.leads);
+}
+
+function getTargetWarningRows() {
+  return getSourcePriorityRows()
+    .filter(({ metrics }) => metrics.targetStatus === "behind" && metrics.remainingToTarget > 0)
+    .sort((left, right) => right.metrics.remainingToTarget - left.metrics.remainingToTarget);
 }
 
 function getTodayActionQueue(limit = 6) {
   const today = todayDate();
   return state.data.leads
+    .filter((lead) => leadMatchesAnalysisFilters(lead))
     .map((lead) => {
       const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
       const computedStage = getComputedLeadStage(lead, today);
@@ -809,25 +1025,6 @@ function getTodayActionQueue(limit = 6) {
     .filter((item) => item.priority > 0)
     .sort((left, right) => right.priority - left.priority)
     .slice(0, limit);
-}
-
-function getDropoffRows() {
-  const today = todayDate();
-  return getSourcePriorityRows()
-    .map(({ source, metrics }) => {
-      const stalledLeads = getSourceLeads(source).filter((lead) => {
-        const computedStage = getComputedLeadStage(lead, today);
-        return computedStage === "Delayed" || !lead.next_step;
-      }).length;
-      return {
-        source,
-        stalledLeads,
-        readyForHandoff: metrics.readyForHandoff,
-        needsReply: metrics.needsReply,
-      };
-    })
-    .filter((row) => row.stalledLeads || row.readyForHandoff || row.needsReply)
-    .sort((left, right) => right.stalledLeads - left.stalledLeads || right.readyForHandoff - left.readyForHandoff);
 }
 
 function setDrawer(drawerState) {
@@ -903,9 +1100,19 @@ function renderFilters() {
   const focusLabel = copy().meta.lang === "ar" ? "التركيز" : "Focus";
   const needsReplyLabel = copy().meta.lang === "ar" ? "يحتاج رد" : "Needs Reply";
   const readyLabel = copy().meta.lang === "ar" ? "جاهز للتحويل" : "Ready for Handoff";
+  const archivedLabel = copy().meta.lang === "ar" ? "المؤرشف" : "Archived";
+  const hiddenArchivedLabel = copy().meta.lang === "ar" ? "مخفي" : "Hidden";
+  const showArchivedLabel = copy().meta.lang === "ar" ? "إظهار" : "Show";
 
   if (state.activeScreen === "analysis") {
     elements.filters.innerHTML = `
+      <label>
+        <span>${getFieldLabel("source", "Source")}</span>
+        <select data-filter="source">
+          <option value="all">${copy().chrome.filters.all}</option>
+          ${sourceOptions}
+        </select>
+      </label>
       <label>
         <span>${copy().chrome.filters.sector}</span>
         <select data-filter="sector">
@@ -919,6 +1126,13 @@ function renderFilters() {
           <option value="all">${copy().chrome.filters.all}</option>
           <option value="yes">${copy().chrome.filters.yes}</option>
           <option value="no">${copy().chrome.filters.no}</option>
+        </select>
+      </label>
+      <label>
+        <span>${archivedLabel}</span>
+        <select data-filter="archived">
+          <option value="hidden">${hiddenArchivedLabel}</option>
+          <option value="show">${showArchivedLabel}</option>
         </select>
       </label>
     `;
@@ -961,6 +1175,13 @@ function renderFilters() {
           <option value="ready-handoff">${readyLabel}</option>
         </select>
       </label>
+      <label>
+        <span>${archivedLabel}</span>
+        <select data-filter="archived">
+          <option value="hidden">${hiddenArchivedLabel}</option>
+          <option value="show">${showArchivedLabel}</option>
+        </select>
+      </label>
     `;
   } else {
     elements.filters.innerHTML = `
@@ -986,6 +1207,13 @@ function renderFilters() {
           <option value="no">${copy().chrome.filters.no}</option>
         </select>
       </label>
+      <label>
+        <span>${archivedLabel}</span>
+        <select data-filter="archived">
+          <option value="hidden">${hiddenArchivedLabel}</option>
+          <option value="show">${showArchivedLabel}</option>
+        </select>
+      </label>
     `;
   }
 
@@ -1007,8 +1235,12 @@ function setScreenActions(html) {
 
   elements.screenActions.innerHTML = `
     <span class="storage-pill ${state.storage.available ? "" : "warning"}">${storageLabel}</span>
-    <button class="ghost-button" type="button" data-action="restore-seed">${copy().chrome.buttons.restoreSeed}</button>
-    <button class="ghost-button" type="button" data-action="reset-local">${copy().chrome.buttons.resetLocal}</button>
+    ${
+      DEBUG_MODE
+        ? `<button class="ghost-button" type="button" data-action="restore-seed">${copy().chrome.buttons.restoreSeed}</button>
+    <button class="ghost-button" type="button" data-action="reset-local">${copy().chrome.buttons.resetLocal}</button>`
+        : ""
+    }
     ${html}
   `;
 }
@@ -1033,7 +1265,7 @@ function attachActionListeners() {
         entityType: "lead",
         mode: "create",
         message: "",
-        contextSource: getActiveSource(),
+        contextSource: resolveActiveSource(),
       });
     }
     if (action === "new-opportunity") {
@@ -1069,7 +1301,7 @@ function attachActionListeners() {
           entityType: button.dataset.guidanceEntity,
           mode: "create",
           message: "",
-          contextSource: button.dataset.guidanceEntity === "lead" ? getActiveSource() : "",
+          contextSource: button.dataset.guidanceEntity === "lead" ? resolveActiveSource() : "",
         });
       }
       if (actionType === "convert-lead" && button.dataset.guidanceLead) {
@@ -1120,13 +1352,6 @@ function displayWorkflowBucket(bucket) {
     "Closed / Disqualified": copy().meta.lang === "ar" ? "مغلق / مستبعد" : "Closed / Disqualified",
   };
   return labels[bucket] || bucket;
-}
-
-function getSourceTabSummary(source) {
-  const metrics = getSourceMetrics(source);
-  return copy().meta.lang === "ar"
-    ? `${metrics.leads} جهة • ${metrics.opportunities} فرصة`
-    : `${metrics.leads} leads • ${metrics.opportunities} opportunities`;
 }
 
 function getSourcePlaybook(source) {
@@ -1185,6 +1410,84 @@ function getSourcePlaybook(source) {
           tricks: ["Start with visible decision-makers", "Capture the signal, not just the name", "Write a source-specific next step"],
           qualifies: "There is clear operational pain and a relevant professional contact.",
         },
+    Email: isArabic
+      ? {
+          whereToLook: ["الرسائل الواردة غير المكتملة", "سلاسل الردود التي توقفت", "الاستفسارات التي وصلت بدون متابعة"],
+          signals: ["طلب عرض أو تسعير", "سؤال تنفيذي لم يُغلق", "رد يصف ألمًا تشغيليًا"],
+          tricks: ["ابدأ بأحدث thread غير محسوم", "حوّل كل pain واضح إلى lead مستقل", "اربط next step بالرد القادم مباشرة"],
+          qualifies: "هناك طلب واضح أو ألم تشغيلي داخل رسالة يمكن تحريكها فورًا.",
+        }
+      : {
+          whereToLook: ["Incomplete inbound threads", "Reply chains that went quiet", "Inquiries that arrived without a follow-up"],
+          signals: ["Pricing or proposal ask", "Operational question left unresolved", "Reply describing a real workflow pain"],
+          tricks: ["Start with the newest unresolved thread", "Turn each clear pain point into its own lead", "Tie the next step to the next reply directly"],
+          qualifies: "There is a clear ask or operational pain inside an email thread we can move immediately.",
+        },
+    Google: isArabic
+      ? {
+          whereToLook: ["نماذج التواصل الواردة", "المراجعات السلبية", "استفسارات البحث والخرائط"],
+          signals: ["شكوى من بطء الرد", "طلب حجز أو متابعة", "انطباع سلبي عن تجربة التواصل"],
+          tricks: ["ابدأ بأحدث نموذج وصل", "استخرج الألم من نص المراجعة لا من التقييم فقط", "دوّن سبب الوصول من جوجل بوضوح"],
+          qualifies: "الجهة جاءت من intent بحث واضح أو من شكوى يمكن تحويلها إلى متابعة عملية.",
+        }
+      : {
+          whereToLook: ["Contact-form submissions", "Negative reviews", "Search and Maps inquiries"],
+          signals: ["Complaint about slow response", "Booking or follow-up request", "Negative sentiment about communication"],
+          tricks: ["Start with the newest form submission", "Extract pain from review text, not just the rating", "Capture why this surfaced from Google"],
+          qualifies: "The lead comes from clear search intent or a complaint we can turn into a practical next move.",
+        },
+    Instagram: isArabic
+      ? {
+          whereToLook: ["الرسائل الخاصة غير المردود عليها", "تعليقات البوستات", "الردود على الستوري"],
+          signals: ["سؤال مباشر عن الخدمة", "تعليق يطلب تواصلًا", "ألم ظاهر داخل DM أو تعليق"],
+          tricks: ["ابدأ بالـ DMs قبل التعليقات العامة", "سجل اسم النشاط حتى لو الحساب شخصي", "حوّل التفاعل القصير إلى خطوة متابعة حقيقية"],
+          qualifies: "هناك intent واضح داخل DM أو تعليق ويمكن نقل الحوار إلى متابعة مباشرة.",
+        }
+      : {
+          whereToLook: ["Unanswered DMs", "Post comments", "Story replies"],
+          signals: ["Direct service question", "Comment asking someone to reach out", "Visible pain inside a DM or comment"],
+          tricks: ["Start with DMs before public comments", "Capture the business name even if the profile looks personal", "Turn short engagement into a real next step"],
+          qualifies: "There is clear intent in a DM or comment and a direct path to continue the conversation.",
+        },
+    TikTok: isArabic
+      ? {
+          whereToLook: ["تعليقات الفيديوهات", "الرسائل بعد المحتوى", "تفاعل الحسابات المستهدفة"],
+          signals: ["طلب تفاصيل في التعليقات", "مشكلة تتكرر في أكثر من فيديو", "اهتمام من نشاط تجاري واضح"],
+          tricks: ["التقط التعليقات التي فيها intent لا المجاملة", "اربط lead بالفيديو أو الزاوية", "حدّد سريعًا هل تحتاج رد أم تأهيل"],
+          qualifies: "هناك إشارة شراء أو ألم تشغيلي ظهرت من تفاعل فعلي داخل المنصة.",
+        }
+      : {
+          whereToLook: ["Video comments", "Messages after content", "Engagement from target business accounts"],
+          signals: ["Comment asking for details", "Problem repeated across videos", "Clear interest from a real business"],
+          tricks: ["Capture intent-driven comments, not compliments", "Tie the lead to the video angle that surfaced it", "Decide fast whether it needs reply or qualification"],
+          qualifies: "A buying signal or operational pain is visible through real platform engagement.",
+        },
+    YouTube: isArabic
+      ? {
+          whereToLook: ["تعليقات الفيديوهات التعليمية", "القنوات القطاعية", "التعليقات التي تصف مشكلة تشغيلية"],
+          signals: ["سؤال مفصل عن الحل", "تعليق يشرح عطلًا متكررًا", "وجود شركة أو مدير في النقاش"],
+          tricks: ["ابدأ بالتعليقات الطويلة الواضحة", "التقط اسم الشركة أو القطاع من سياق القناة", "اكتب next step تشير إلى الفيديو أو الموضوع"],
+          qualifies: "التعليق يكشف ألمًا تشغيليًا حقيقيًا وشخصًا مناسبًا للمتابعة.",
+        }
+      : {
+          whereToLook: ["Educational video comments", "Industry channels", "Comments describing operational pain"],
+          signals: ["Detailed question about the solution", "Comment explaining recurring failure", "A business or manager visible in the thread"],
+          tricks: ["Start with longer, clearer comments", "Capture the business or sector from channel context", "Reference the video topic in the next step"],
+          qualifies: "The comment reveals real operational pain and a relevant person to follow up with.",
+        },
+    "Competitor Comments": isArabic
+      ? {
+          whereToLook: ["تعليقات العملاء الغاضبين عند المنافسين", "الشكاوى على البوستات الإعلانية", "المراجعات التي تذكر ضعف المتابعة"],
+          signals: ["شكوى من عدم الرد", "تعليق عن فوضى أو تأخير", "طلب بديل أو توصية"],
+          tricks: ["ابحث عن الشكوى القابلة للحل لا عن الهجوم العام", "التقط سبب التحول المحتمل", "اكتب next step بصياغة إنقاذ لا بيع مباشر"],
+          qualifies: "هناك ألم معلن مع منافس وحافز واضح لتجربة بديل أفضل.",
+        }
+      : {
+          whereToLook: ["Angry customer comments on competitor posts", "Complaint threads under ads", "Reviews mentioning weak follow-up"],
+          signals: ["Complaint about no response", "Comment about chaos or delay", "Request for an alternative or recommendation"],
+          tricks: ["Look for solvable complaints, not generic attacks", "Capture the switching reason", "Write the next step as a rescue move, not a hard sell"],
+          qualifies: "There is public pain with a competitor and a believable reason to switch.",
+        },
   };
 
   return presets[source] || defaults;
@@ -1235,44 +1538,21 @@ function renderSourceSnapshot(source) {
         </div>
       </div>
       <div class="detail-grid tight">
+        <div><span>${copy().meta.lang === "ar" ? "التُقطوا اليوم" : "Captured today"}</span><strong>${metrics.todayLeads}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "هدف اليوم" : "Daily target"}</span><strong>${metrics.dailyTarget}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "المتبقي" : "Remaining"}</span><strong>${metrics.remainingToTarget}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "حالة الهدف" : "Target status"}</span><strong>${copy().meta.lang === "ar" ? (metrics.targetStatus === "done" ? "مكتمل" : metrics.targetStatus === "on_track" ? "على المسار" : "متأخر") : (metrics.targetStatus === "done" ? "Done" : metrics.targetStatus === "on_track" ? "On track" : "Behind")}</strong></div>
         <div><span>${copy().meta.lang === "ar" ? "إجمالي اللِيدز" : "Total leads"}</span><strong>${metrics.leads}</strong></div>
         <div><span>${copy().meta.lang === "ar" ? "تحتاج رد" : "Needs reply"}</span><strong>${metrics.needsReply}</strong></div>
         <div><span>${copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for handoff"}</span><strong>${metrics.readyForHandoff}</strong></div>
         <div><span>${copy().meta.lang === "ar" ? "فرص ناتجة" : "Progressed opportunities"}</span><strong>${metrics.opportunities}</strong></div>
       </div>
+      ${metrics.warning ? `<p class="source-target-banner warning inline-warning">${metrics.warning}</p>` : ""}
       <p class="card-summary">
         ${
           copy().meta.lang === "ar"
             ? "هذا الملخص يوضح أين تقف هذه القناة الآن: ما تم التقاطه، وما يحتاج ردًا، وما أصبح جاهزًا للانتقال إلى فرصة."
             : "This snapshot shows what the source has captured, what still needs reply, and what is ready to move into opportunities."
-        }
-      </p>
-    </article>
-  `;
-}
-
-function renderExtractionPanel(source) {
-  const metrics = getSourceMetrics(source);
-  return `
-    <article class="panel source-panel extraction-panel">
-      <div class="panel-head">
-        <div>
-          <p class="panel-label">${copy().meta.lang === "ar" ? "الاستخراج" : "Extraction"}</p>
-          <h3>${displayChannel(source)}</h3>
-        </div>
-        <button class="primary-button tight" type="button" data-action="new-lead">${copy().chrome.buttons.newLead}</button>
-      </div>
-      <div class="detail-grid tight">
-        <div><span>${copy().meta.lang === "ar" ? "الإشارات داخل القناة" : "Signals in source"}</span><strong>${metrics.leads}</strong></div>
-        <div><span>${copy().meta.lang === "ar" ? "تحتاج رد" : "Need reply"}</span><strong>${metrics.needsReply}</strong></div>
-        <div><span>${copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for handoff"}</span><strong>${metrics.readyForHandoff}</strong></div>
-        <div><span>${copy().meta.lang === "ar" ? "فرص ناتجة" : "Progressed opportunities"}</span><strong>${metrics.opportunities}</strong></div>
-      </div>
-      <p class="card-summary">
-        ${
-          copy().meta.lang === "ar"
-            ? "استخدم هذا التبويب لتسجيل lead جديدة من نفس القناة بسرعة ثم تحريكها داخل inbox واضح حتى التحويل إلى فرصة."
-            : "Use this tab to capture new leads from the same source quickly, then move them through a clear inbox until handoff and opportunity creation."
         }
       </p>
     </article>
@@ -1545,8 +1825,8 @@ function renderLeadCommandRow(lead, options = {}) {
 function renderAnalysisScreen() {
   const metrics = getAnalysisMetrics();
   const sourceRows = getSourcePriorityRows();
+  const targetWarnings = getTargetWarningRows();
   const actionQueue = getTodayActionQueue(5);
-  const dropoffRows = getDropoffRows();
 
   setScreenActions("");
 
@@ -1554,6 +1834,8 @@ function renderAnalysisScreen() {
     <section class="command-deck">
       <section class="top-strip metrics-strip">
         ${renderKpiCell(copy().meta.lang === "ar" ? "إشارات اليوم" : "Signals today", metrics.newToday, "primary")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "المتبقي للأهداف" : "Remaining to target", metrics.remainingToTarget, metrics.remainingToTarget ? "alert" : "")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "قنوات مكتملة" : "Sources done", metrics.targetDone)}
         ${renderKpiCell(copy().meta.lang === "ar" ? "تحتاج حركة" : "Need movement", metrics.needsContact, "alert")}
         ${renderKpiCell(copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready to convert", metrics.readyForHandoff)}
         ${renderKpiCell(copy().meta.lang === "ar" ? "فرص مفتوحة" : "Open revenue", metrics.openOpportunities)}
@@ -1597,13 +1879,13 @@ function renderAnalysisScreen() {
                       <strong>${displayChannel(source)}</strong>
                       <div class="meta-row">${
                         copy().meta.lang === "ar"
-                          ? `${sourceMetrics.leads} جهة • ${sourceMetrics.needsReply} تحتاج رد • ${sourceMetrics.opportunities} فرصة`
-                          : `${sourceMetrics.leads} leads • ${sourceMetrics.needsReply} need reply • ${sourceMetrics.opportunities} opportunities`
+                          ? `${sourceMetrics.todayLeads}/${sourceMetrics.dailyTarget} اليوم • المتبقي ${sourceMetrics.remainingToTarget} • ${sourceMetrics.needsReply} تحتاج رد`
+                          : `${sourceMetrics.todayLeads}/${sourceMetrics.dailyTarget} today • ${sourceMetrics.remainingToTarget} remaining • ${sourceMetrics.needsReply} need reply`
                       }</div>
+                      <div class="meta-row source-action-copy">${getSourceActionPrompt(source, sourceMetrics)}</div>
                     </div>
                     <div class="system-row-side">
-                      <span class="system-number">${sourceMetrics.readyForHandoff}</span>
-                      <span class="system-label">${copy().meta.lang === "ar" ? "جاهزة" : "ready"}</span>
+                      ${renderTargetStatusBadge(sourceMetrics.targetStatus)}
                     </div>
                   </button>
                 `,
@@ -1615,30 +1897,30 @@ function renderAnalysisScreen() {
         <article class="intent-section faded">
           <div class="intent-head">
             <div>
-              <p class="panel-label">${copy().meta.lang === "ar" ? "أماكن التباطؤ" : "Attention Surface"}</p>
-              <h3>${copy().meta.lang === "ar" ? "مواضع التوقف" : "Where Momentum Slips"}</h3>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "ضغط التنفيذ" : "Execution Pressure"}</p>
+              <h3>${copy().meta.lang === "ar" ? "الفجوة اليومية" : "Daily Target Gap"}</h3>
             </div>
           </div>
           <div class="intent-list">
             ${
-              dropoffRows.length
-                ? dropoffRows
+              targetWarnings.length
+                ? targetWarnings
                     .map(
-                      (row) => `
-                        <button class="system-row warning" type="button" data-source-tab="${row.source}">
+                      ({ source, metrics: sourceMetrics }) => `
+                        <button class="system-row warning" type="button" data-source-tab="${source}">
                           <div class="system-row-main">
-                            <strong>${displayChannel(row.source)}</strong>
+                            <strong>${displayChannel(source)}</strong>
                             <div class="meta-row">
                               ${
                                 copy().meta.lang === "ar"
-                                  ? `${row.stalledLeads} متعطلة • ${row.needsReply} تحتاج رد`
-                                  : `${row.stalledLeads} stalled • ${row.needsReply} need reply`
+                                  ? `${sourceMetrics.warning} • ${sourceMetrics.todayLeads}/${sourceMetrics.dailyTarget}`
+                                  : `${sourceMetrics.warning} • ${sourceMetrics.todayLeads}/${sourceMetrics.dailyTarget}`
                               }
                             </div>
                           </div>
                           <div class="system-row-side">
-                            <span class="system-number">${row.readyForHandoff}</span>
-                            <span class="system-label">${copy().meta.lang === "ar" ? "جاهزة" : "ready"}</span>
+                            <span class="system-number">${sourceMetrics.remainingToTarget}</span>
+                            <span class="system-label">${copy().meta.lang === "ar" ? "متبقٍ" : "left"}</span>
                           </div>
                         </button>
                       `,
@@ -1666,8 +1948,8 @@ function renderAnalysisScreen() {
               <strong>${copy().meta.lang === "ar" ? "إذا لم توجد خطوة تالية، فالسجل متوقف حتى لو بدا نشطًا." : "If there is no next step, the record is stalled even if it looks active."}</strong>
             </div>
             <div class="rule-tile">
-              <span>${copy().meta.lang === "ar" ? "نقطة التحويل" : "Conversion gate"}</span>
-              <strong>${copy().meta.lang === "ar" ? "حافظ على handoff واضحًا ثم حوّل مباشرة دون ترك الصف يبرد." : "Keep the handoff crisp, then convert immediately before the queue cools down."}</strong>
+              <span>${copy().meta.lang === "ar" ? "ضغط اليوم" : "Daily push"}</span>
+              <strong>${copy().meta.lang === "ar" ? "القناة المتأخرة عن هدفها اليومي يجب أن تتحرك قبل التوسّع في أعمال أقل إلحاحًا." : "Any source behind its daily target should move before expanding into lower-pressure work."}</strong>
             </div>
           </div>
         </article>
@@ -1742,6 +2024,50 @@ function renderAllLeadsScreen() {
   `;
 }
 
+function renderQuickCaptureForm(source) {
+  const sectorOptions = state.data.sectors
+    .map((sector) => `<option value="${sector.id}">${sector.sector_name}</option>`)
+    .join("");
+
+  return `
+    <form class="quick-capture-card" data-quick-capture="${source}">
+      <div class="quick-capture-head">
+        <div>
+          <p class="panel-label">${copy().meta.lang === "ar" ? "التقاط سريع" : "Quick Capture"}</p>
+          <h3>${copy().meta.lang === "ar" ? "سجّل lead الآن" : "Log a lead now"}</h3>
+        </div>
+        <span class="source-badge">${displayChannel(source)}</span>
+      </div>
+      <div class="quick-capture-grid">
+        <label><span>${getFormLabel("companyName", "company_name")}</span><input name="company_name" required /></label>
+        <label><span>${getFormLabel("sectorId", "sector_id")}</span><select name="sector_id">${sectorOptions}</select></label>
+        <label class="quick-capture-wide"><span>${getFormLabel("painSignal", "pain_signal")}</span><input name="pain_signal" required /></label>
+      </div>
+      <div class="form-actions">
+        <button class="primary-button" type="submit">${copy().meta.lang === "ar" ? "التقاط الآن" : "Capture now"}</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderRecentCaptureActions(source) {
+  const recentLead = state.data.leads.find((lead) => lead.id === state.recentCaptureLeadId);
+  if (!recentLead || recentLead.channel !== source || isLeadArchived(recentLead)) {
+    return "";
+  }
+
+  return `
+    <div class="recent-capture-banner">
+      <p>${copy().meta.lang === "ar" ? `تم التقاط ${recentLead.company_name}. الخطوة التالية الآن يجب أن تكون واضحة.` : `${recentLead.company_name} captured. The next move should be obvious now.`}</p>
+      <div class="guidance-actions">
+        <button class="ghost-button tight" type="button" data-open-record="lead:${recentLead.id}">${copy().meta.lang === "ar" ? "افتح الجهة" : "Open lead"}</button>
+        <button class="ghost-button tight" type="button" data-open-opener="${recentLead.id}">${copy().meta.lang === "ar" ? "أضف opener note" : "Add opener note"}</button>
+        <button class="primary-button tight" type="button" data-move-outreach="${recentLead.id}">${copy().meta.lang === "ar" ? "حرّك إلى outreach" : "Move to outreach"}</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderSourceScreen(source) {
   if (!source) {
     return renderEmptyState();
@@ -1750,6 +2076,8 @@ function renderSourceScreen(source) {
   state.activeSource = source;
   const metrics = getSourceMetrics(source);
   const sourceLeads = getSourceLeads(source);
+  const targetWarning = metrics.warning;
+  const actionPrompt = getSourceActionPrompt(source, metrics);
   const commandLeads = sourceLeads
     .filter((lead) => {
       const bucket = getLeadWorkflowBucket(lead, state.data.opportunities);
@@ -1762,10 +2090,11 @@ function renderSourceScreen(source) {
   return `
     <section class="command-deck source-deck">
       <section class="top-strip metrics-strip">
+        ${renderKpiCell(copy().meta.lang === "ar" ? "التُقطوا اليوم" : "Captured today", metrics.todayLeads, "primary")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "هدف اليوم" : "Daily target", metrics.dailyTarget)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "المتبقي" : "Remaining", metrics.remainingToTarget, metrics.targetStatus === "behind" ? "alert" : "")}
         ${renderKpiCell(copy().meta.lang === "ar" ? "إجمالي اللِيدز" : "Captured", metrics.leads, "primary")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "تحتاج رد" : "Need reply", metrics.needsReply, "alert")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready", metrics.readyForHandoff)}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "فرص ناتجة" : "Opportunities", metrics.opportunities)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "حالة الهدف" : "Target status", copy().meta.lang === "ar" ? (metrics.targetStatus === "done" ? "مكتمل" : metrics.targetStatus === "on_track" ? "على المسار" : "متأخر") : (metrics.targetStatus === "done" ? "Done" : metrics.targetStatus === "on_track" ? "On track" : "Behind"), metrics.targetStatus === "behind" ? "alert" : "")}
       </section>
 
       <section class="command-zone">
@@ -1773,20 +2102,19 @@ function renderSourceScreen(source) {
           <div>
             <p class="panel-label">${copy().meta.lang === "ar" ? "غرفة القيادة" : "Source Command"}</p>
             <h2>${copy().meta.lang === "ar" ? `تشغيل ${displayChannel(source)}` : `${displayChannel(source)} Control Room`}</h2>
-            <p class="zone-copy">${
-              copy().meta.lang === "ar"
-                ? "أفضل الخطوات التالية داخل هذه القناة فقط، مع نفس منطق: إشارة ثم قرار ثم تنفيذ."
-                : "Best next moves inside this source only, using the same signal-to-decision flow."
-            }</p>
+            <p class="zone-copy">${actionPrompt}</p>
           </div>
         </div>
+        ${targetWarning ? `<div class="source-target-banner warning">${targetWarning}</div>` : `<div class="source-target-banner">${copy().meta.lang === "ar" ? `الهدف اليومي: ${metrics.todayLeads} / ${metrics.dailyTarget}` : `Daily target: ${metrics.todayLeads} / ${metrics.dailyTarget}`}</div>`}
+        ${renderQuickCaptureForm(source)}
+        ${renderRecentCaptureActions(source)}
         <div class="command-zone-list">
           ${commandLeads.length ? commandLeads.map((lead) => renderLeadCommandRow(lead, { preferConvert: true })).join("") : renderEmptyState()}
         </div>
       </section>
 
       <section class="operational-grid source-ops-grid">
-        <article class="intent-section elevated">
+        <div class="intent-section elevated">
           <div class="intent-head">
             <div>
               <p class="panel-label">${copy().meta.lang === "ar" ? "طريقة الصيد" : "Hunt Protocol"}</p>
@@ -1794,9 +2122,9 @@ function renderSourceScreen(source) {
             </div>
           </div>
           ${renderSourceHuntPanel(source)}
-        </article>
+        </div>
 
-        <article class="intent-section">
+        <div class="intent-section">
           <div class="intent-head">
             <div>
               <p class="panel-label">${copy().meta.lang === "ar" ? "حالة القناة" : "Source Snapshot"}</p>
@@ -1804,7 +2132,7 @@ function renderSourceScreen(source) {
             </div>
           </div>
           ${renderSourceSnapshot(source)}
-        </article>
+        </div>
 
         <article class="bottom-zone full-span">
           <div class="intent-head">
@@ -1891,11 +2219,13 @@ function renderLeadDrawer(lead) {
               .join("")}</div>`
           : ""
       }
+      ${lead.archived ? `<div class="guard-row"><span class="guard-pill warning">${copy().meta.lang === "ar" ? "مؤرشف" : "Archived"}</span></div>` : ""}
       ${fieldRow(getFieldLabel("sector", "Sector"), sector?.sector_name)}
       ${fieldRow(getFieldLabel("contact", "Contact"), `${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}`)}
       ${fieldRow(getFieldLabel("channel", "Channel"), displayChannel(lead.channel))}
       ${fieldRow(getFieldLabel("score", "Score"), lead.lead_score)}
       ${fieldRow(getFieldLabel("painSignal", "Pain Signal"), lead.pain_signal)}
+      ${fieldRow(copy().meta.lang === "ar" ? "الحالة التشغيلية" : "Operational state", lead.operational_state || "active")}
       ${fieldRow(getFieldLabel("interestType", "Interest Type"), displayInterestType(lead.interest_type))}
       ${fieldRow(getFieldLabel("currentStage", "Current Stage"), displayStage(computedStage))}
       ${fieldRow(getFieldLabel("shortNote", "Short Note"), lead.notes)}
@@ -1948,6 +2278,7 @@ function renderLeadDrawer(lead) {
         <label><span>${getFormLabel("notes", "notes")}</span><textarea name="notes">${lead.notes || ""}</textarea></label>
         <label><span>${getFieldLabel("handoffSummary", "Handoff Summary")}</span><textarea name="handoff_summary">${lead.handoff_summary || ""}</textarea></label>
         <div class="form-actions">
+          ${!lead.archived ? `<button class="ghost-button" type="button" data-archive-lead="${lead.id}">${copy().meta.lang === "ar" ? "أرشفة" : "Archive"}</button>` : ""}
           ${
             eligibleForOpportunity
               ? `<button class="ghost-button" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button>`
@@ -2069,14 +2400,26 @@ function renderCreateForm(entityType) {
   }
 
   if (entityType === "lead") {
-    const activeSectors = state.data.sectors.filter((sector) => sector.is_active);
-    const activeSource = state.drawer.contextSource || getActiveSource();
+    const sectorOptions = state.data.sectors
+      .map((sector) => {
+        const activeLabel = sector.is_active
+          ? (copy().meta.lang === "ar" ? "نشط" : "Active")
+          : displayStage(sector.status);
+        return `<option value="${sector.id}" data-active="${sector.is_active ? "1" : "0"}">${sector.sector_name} • ${activeLabel}</option>`;
+      })
+      .join("");
+    const activeSource = state.drawer.contextSource || resolveActiveSource();
     return `
       <section class="drawer-section">
         <h4>${copy().chrome.forms.createLead}</h4>
         <form data-create-form="lead">
           <label><span>${getFormLabel("companyName", "company_name")}</span><input name="company_name" required /></label>
-          <label><span>${getFormLabel("sectorId", "sector_id")}</span><select name="sector_id">${activeSectors.map((sector) => `<option value="${sector.id}">${sector.sector_name}</option>`).join("")}</select></label>
+          <label><span>${getFormLabel("sectorId", "sector_id")}</span><select name="sector_id" data-sector-select>${sectorOptions}</select></label>
+          <p class="form-note warning" data-sector-note>${
+            copy().meta.lang === "ar"
+              ? "يمكن التسجيل في أي قطاع، لكن القطاعات غير النشطة تحتاج قرارًا واعيًا حتى لا تشتت التركيز الأسبوعي."
+              : "You can log a lead into any sector, but non-active sectors should be used intentionally so weekly focus does not drift."
+          }</p>
           <label><span>${getFormLabel("contactName", "contact_name")}</span><input name="contact_name" required /></label>
           <label><span>${getFormLabel("role", "role")}</span><input name="role" /></label>
           <label><span>${getFieldLabel("channel", "Channel")}</span><select name="channel">${getChannelOptions()
@@ -2194,6 +2537,7 @@ async function patchEntity(entityType, entityId, patch, message = "") {
   if (entityType !== "sector" && patch.current_stage) {
     payload.stage_updated_at = todayDate();
   }
+  payload.updated_at = todayDate();
   const nextState = await mutateState(`/${entityPath}/${entityId}`, {
     method: "PATCH",
     body: payload,
@@ -2207,21 +2551,12 @@ async function patchEntity(entityType, entityId, patch, message = "") {
 
 async function saveSectorForm(form) {
   const entityId = form.dataset.entityId;
-  const patch = readFormValues(form);
+  const existing = state.data.sectors.find((sector) => sector.id === entityId);
+  const patch = { ...existing, ...readFormValues(form) };
   patch.notes = patch.notes || "";
   patch.owner = "Admin";
   patch.next_step = patch.next_step || "";
   patch.next_step_date = patch.next_step_date || "";
-  patch.status = state.data.sectors.find((sector) => sector.id === entityId)?.status;
-  patch.is_active = state.data.sectors.find((sector) => sector.id === entityId)?.is_active;
-  patch.priority = state.data.sectors.find((sector) => sector.id === entityId)?.priority;
-  patch.score = state.data.sectors.find((sector) => sector.id === entityId)?.score;
-  patch.icp = state.data.sectors.find((sector) => sector.id === entityId)?.icp;
-  patch.pain = state.data.sectors.find((sector) => sector.id === entityId)?.pain;
-  patch.offer_angle = state.data.sectors.find((sector) => sector.id === entityId)?.offer_angle;
-  patch.proof_needed = state.data.sectors.find((sector) => sector.id === entityId)?.proof_needed;
-  patch.final_decision = state.data.sectors.find((sector) => sector.id === entityId)?.final_decision;
-  patch.sector_name = state.data.sectors.find((sector) => sector.id === entityId)?.sector_name;
   const errors = getRequiredValidationErrors("sector", patch);
 
   if (errors.length) {
@@ -2313,6 +2648,8 @@ async function createEntity(entityType, form) {
       score: 60,
       is_active: values.status === "Active",
       notes: "",
+      created_at: todayDate(),
+      updated_at: todayDate(),
     };
     const errors = getRequiredValidationErrors("sector", draft);
     if (errors.length) {
@@ -2329,11 +2666,6 @@ async function createEntity(entityType, form) {
   }
 
   if (entityType === "lead") {
-    const sector = state.data.sectors.find((item) => item.id === values.sector_id);
-    if (!sector?.is_active) {
-      setDrawer({ message: localizeMessage("New leads can only be created for the active sector.") });
-      return;
-    }
     const draft = {
       id: `lead-${crypto.randomUUID().slice(0, 8)}`,
       company_name: values.company_name,
@@ -2353,7 +2685,11 @@ async function createEntity(entityType, form) {
       lead_score: 10,
       last_contact_date: todayDate(),
       handoff_summary: "",
+      archived: false,
+      operational_state: "active",
       stage_updated_at: todayDate(),
+      created_at: todayDate(),
+      updated_at: todayDate(),
     };
     const errors = [
       ...localizeMessages(getRequiredValidationErrors("lead", draft)),
@@ -2408,6 +2744,8 @@ async function createEntity(entityType, form) {
       next_step: values.next_step,
       next_step_date: values.next_step_date,
       stage_updated_at: todayDate(),
+      created_at: todayDate(),
+      updated_at: todayDate(),
     };
     const errors = [
       ...localizeMessages(getRequiredValidationErrors("opportunity", draft)),
@@ -2434,6 +2772,124 @@ async function createEntity(entityType, form) {
   }
 
   closeDrawer();
+  renderApp();
+}
+
+async function createQuickLead(form) {
+  const values = readFormValues(form);
+  const source = form.dataset.quickCapture || resolveActiveSource();
+  const draft = {
+    id: `lead-${crypto.randomUUID().slice(0, 8)}`,
+    company_name: values.company_name,
+    sector_id: values.sector_id,
+    contact_name: values.company_name,
+    role: "",
+    channel: source,
+    owner: "Admin",
+    current_stage: "New",
+    next_step: copy().meta.lang === "ar" ? "مراجعة الإشارة وتأهيل الجهة" : "Review signal and qualify lead",
+    next_step_date: todayDate(),
+    notes: "",
+    pain_signal: values.pain_signal,
+    urgency_level: "Medium",
+    decision_level: "Unknown",
+    interest_type: "New",
+    lead_score: 5,
+    last_contact_date: todayDate(),
+    handoff_summary: "",
+    archived: false,
+    operational_state: "captured_today",
+    stage_updated_at: todayDate(),
+    created_at: todayDate(),
+    updated_at: todayDate(),
+  };
+  const errors = [
+    ...localizeMessages(getRequiredValidationErrors("lead", draft)),
+    ...localizeMessages(validateLeadTransition(draft, draft.current_stage)),
+  ];
+
+  if (errors.length) {
+    setNotice(errors.join(" "));
+    renderApp();
+    return;
+  }
+
+  const nextState = await mutateState("/leads", {
+    method: "POST",
+    body: draft,
+    message: copy().meta.lang === "ar" ? "تم تسجيل lead سريعًا." : "Lead captured quickly.",
+  });
+  const createdLead = nextState.leads.find((item) => item.id === draft.id);
+  state.recentCaptureLeadId = createdLead.id;
+  setGuidance({
+    message:
+      copy().meta.lang === "ar"
+        ? `تم تسجيل ${createdLead.company_name}. الخطوة التالية الآن: افتح الجهة، أضف opener note، أو حرّكها إلى outreach.`
+        : `${createdLead.company_name} captured. Next move now: open the lead, add an opener note, or move it to outreach.`,
+    action: {
+      type: "open-record",
+      entityType: "lead",
+      entityId: createdLead.id,
+      label: copy().meta.lang === "ar" ? "أكمل التفاصيل" : "Enrich later",
+    },
+  });
+  renderApp();
+}
+
+async function archiveLead(leadId) {
+  const lead = state.data.leads.find((item) => item.id === leadId);
+  if (!lead) {
+    return;
+  }
+
+  await patchEntity("lead", leadId, { archived: true }, copy().meta.lang === "ar" ? "تمت أرشفة الجهة." : "Lead archived.");
+  if (state.recentCaptureLeadId === leadId) {
+    state.recentCaptureLeadId = "";
+  }
+  closeDrawer();
+  renderApp();
+}
+
+function openLeadForOpener(leadId) {
+  state.recentCaptureLeadId = leadId;
+  setDrawer({
+    open: true,
+    kind: "detail",
+    entityType: "lead",
+    entityId: leadId,
+    mode: "view",
+    message: copy().meta.lang === "ar" ? "أضف opener note الآن ثم احفظ." : "Add the opener note now, then save.",
+  });
+}
+
+async function moveLeadToOutreach(leadId) {
+  const lead = state.data.leads.find((item) => item.id === leadId);
+  if (!lead) {
+    return;
+  }
+
+  const nextStep = lead.next_step || (copy().meta.lang === "ar" ? "إرسال opener أولي" : "Send first opener");
+  await patchEntity("lead", leadId, {
+    current_stage: lead.current_stage === "New" ? "Targeted" : lead.current_stage,
+    next_step: nextStep,
+    next_step_date: lead.next_step_date || todayDate(),
+    operational_state: "needs_first_touch",
+  }, copy().meta.lang === "ar" ? "تم تحريك الجهة إلى outreach." : "Lead moved to outreach.");
+
+  state.recentCaptureLeadId = leadId;
+  const updatedLead = state.data.leads.find((item) => item.id === leadId);
+  setGuidance({
+    message:
+      copy().meta.lang === "ar"
+        ? `${updatedLead.company_name} أصبحت الآن ضمن outreach. افتحها إذا أردت إضافة opener note قبل الإرسال.`
+        : `${updatedLead.company_name} is now in outreach. Open it if you want to add an opener note before sending.`,
+    action: {
+      type: "open-record",
+      entityType: "lead",
+      entityId: leadId,
+      label: copy().meta.lang === "ar" ? "افتح الجهة" : "Open lead",
+    },
+  });
   renderApp();
 }
 
@@ -2512,9 +2968,50 @@ function bindDrawerActions() {
   elements.drawerBody.querySelectorAll("[data-convert-lead]").forEach((button) => {
     button.addEventListener("click", () => convertLeadToOpportunity(button.dataset.convertLead));
   });
+
+  elements.drawerBody.querySelectorAll("[data-archive-lead]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await archiveLead(button.dataset.archiveLead);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
+  });
+
+  elements.drawerBody.querySelectorAll("[data-sector-select]").forEach((select) => {
+    const note = elements.drawerBody.querySelector("[data-sector-note]");
+    const updateSectorNote = () => {
+      if (!note) return;
+      const selected = select.selectedOptions[0];
+      const isActive = selected?.dataset.active === "1";
+      note.classList.toggle("warning", !isActive);
+      note.textContent = isActive
+        ? (copy().meta.lang === "ar"
+            ? "القطاع النشط مناسب لالتقاط يومي مباشر."
+            : "Active sector selected. Good fit for direct daily capture.")
+        : (copy().meta.lang === "ar"
+            ? "هذا القطاع غير نشط الآن. يمكنك التسجيل فيه، لكن لا تدعه يشتت التركيز الأسبوعي."
+            : "This sector is not active right now. You can still log the lead there, but keep weekly focus intentional.");
+    };
+
+    updateSectorNote();
+    select.addEventListener("change", updateSectorNote);
+  });
 }
 
 function bindRecordOpeners() {
+  elements.content.querySelectorAll("[data-quick-capture]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await createQuickLead(form);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
+  });
+
   elements.content.querySelectorAll("[data-source-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeSource = button.dataset.sourceTab;
@@ -2535,6 +3032,20 @@ function bindRecordOpeners() {
 
   elements.content.querySelectorAll("[data-convert-lead]").forEach((button) => {
     button.addEventListener("click", () => convertLeadToOpportunity(button.dataset.convertLead));
+  });
+
+  elements.content.querySelectorAll("[data-open-opener]").forEach((button) => {
+    button.addEventListener("click", () => openLeadForOpener(button.dataset.openOpener));
+  });
+
+  elements.content.querySelectorAll("[data-move-outreach]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await moveLeadToOutreach(button.dataset.moveOutreach);
+      } catch {
+        // Notice is already set by the mutation helper.
+      }
+    });
   });
 
   elements.content.querySelectorAll("[data-set-active]").forEach((button) => {
@@ -2632,7 +3143,6 @@ async function bootstrapApp({ locale = "en", localeConfig = FALLBACK_COPY } = {}
   elements.drawerClose.addEventListener("click", closeDrawer);
   elements.drawerBackdrop.addEventListener("click", closeDrawer);
   await loadInitialDashboardState();
-  startStateSync();
   renderApp();
 }
 

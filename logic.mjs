@@ -101,6 +101,8 @@ const SECTOR_DEFAULTS = {
   next_step: "",
   next_step_date: "",
   notes: "",
+  created_at: "",
+  updated_at: "",
 };
 
 const LEAD_DEFAULTS = {
@@ -122,7 +124,11 @@ const LEAD_DEFAULTS = {
   next_step_date: "",
   notes: "",
   handoff_summary: "",
+  archived: false,
+  operational_state: "active",
   stage_updated_at: "",
+  created_at: "",
+  updated_at: "",
 };
 
 const OPPORTUNITY_DEFAULTS = {
@@ -145,6 +151,8 @@ const OPPORTUNITY_DEFAULTS = {
   next_step_date: "",
   decision_status: "",
   stage_updated_at: "",
+  created_at: "",
+  updated_at: "",
 };
 
 const WEEKLY_FOCUS_DEFAULTS = {
@@ -156,6 +164,7 @@ const WEEKLY_FOCUS_DEFAULTS = {
   decisions_needed: "",
   owner_notes: "",
   top_objection: "",
+  source_targets: {},
 };
 
 function toIsoDate(date) {
@@ -775,6 +784,17 @@ function createSeedData() {
       top_objection: "AI may sound robotic",
       decisions_needed: "Approve clinic proof pack and tighten first WhatsApp opener.",
       owner_notes: "Stay focused on clinics only this week.",
+      source_targets: {
+        WhatsApp: 3,
+        Call: 2,
+        LinkedIn: 2,
+        Email: 2,
+        Google: 1,
+        Instagram: 2,
+        TikTok: 1,
+        YouTube: 1,
+        "Competitor Comments": 1,
+      },
     },
     sectors: [
       {
