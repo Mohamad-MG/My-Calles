@@ -6021,3 +6021,79 @@ html[dir="rtl"] .drawer {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
+
+/* ── KPI Cards: centered content + cleaner visual polish ── */
+.kpi-cell {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  min-height: 96px !important;
+  padding: 14px 12px !important;
+  gap: 8px !important;
+  background:
+    linear-gradient(180deg, rgba(17, 27, 43, 0.96) 0%, rgba(11, 18, 31, 0.98) 100%) !important;
+  border: 1px solid rgba(139, 195, 255, 0.14) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 14px 28px rgba(0, 8, 20, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+.kpi-cell span {
+  display: block !important;
+  text-align: center !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  line-height: 1.45 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: rgba(201, 213, 233, 0.82) !important;
+}
+
+.kpi-cell strong {
+  display: block !important;
+  text-align: center !important;
+  font-size: clamp(1.7rem, 2.3vw, 2.15rem) !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  color: #f8fbff !important;
+}
+
+.kpi-cell.primary {
+  background:
+    linear-gradient(180deg, rgba(28, 53, 92, 0.98) 0%, rgba(14, 25, 43, 0.98) 100%) !important;
+  border-color: rgba(103, 173, 255, 0.28) !important;
+}
+
+.kpi-cell.primary strong {
+  color: #9fd0ff !important;
+}
+
+.kpi-cell.alert {
+  background:
+    linear-gradient(180deg, rgba(53, 35, 18, 0.98) 0%, rgba(27, 20, 11, 0.98) 100%) !important;
+  border-color: rgba(239, 188, 114, 0.24) !important;
+}
+
+.kpi-cell.alert strong {
+  color: #ffd596 !important;
+}
+
+@media (max-width: 900px) {
+  .kpi-cell {
+    min-height: 88px !important;
+    padding: 12px 10px !important;
+    gap: 6px !important;
+    border-radius: 14px !important;
+  }
+
+  .kpi-cell span {
+    font-size: 0.68rem !important;
+    line-height: 1.35 !important;
+  }
+
+  .kpi-cell strong {
+    font-size: clamp(1.45rem, 5vw, 1.8rem) !important;
+  }
+}
