@@ -6097,3 +6097,239 @@ html[dir="rtl"] .drawer {
     font-size: clamp(1.45rem, 5vw, 1.8rem) !important;
   }
 }
+
+/* ── Lead Drawer Polish ── */
+.drawer {
+  width: min(920px, calc(100vw - 32px)) !important;
+}
+
+.drawer-header {
+  padding: 22px 24px 18px !important;
+}
+
+.drawer-header h3 {
+  font-size: clamp(1.15rem, 2vw, 1.45rem) !important;
+}
+
+.drawer-body {
+  padding: 20px 20px 26px !important;
+  display: grid !important;
+  gap: 14px !important;
+}
+
+.drawer-section {
+  padding: 18px !important;
+  border-radius: 20px !important;
+  background: linear-gradient(180deg, rgba(12, 20, 34, 0.96), rgba(8, 14, 25, 0.98)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.14) !important;
+  box-shadow: 0 16px 34px rgba(0, 8, 20, 0.18) !important;
+}
+
+.drawer-section h4 {
+  font-size: 1rem !important;
+  margin-bottom: 10px !important;
+}
+
+.drawer-eyebrow {
+  margin: 0 0 6px;
+  color: rgba(148, 163, 184, 0.88);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+html[lang="ar"] .drawer-eyebrow {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.lead-hero-card {
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 34%),
+    linear-gradient(180deg, rgba(14, 23, 39, 0.98), rgba(8, 14, 25, 1)) !important;
+}
+
+.lead-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.lead-hero-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.lead-hero-copy h4 {
+  margin: 0 !important;
+  font-size: clamp(1.15rem, 2.4vw, 1.55rem) !important;
+  line-height: 1.25 !important;
+}
+
+.lead-hero-subtitle {
+  margin: 0;
+  color: rgba(203, 213, 225, 0.82);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.lead-hero-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lead-score-pill,
+.lead-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lead-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.lead-summary-grid,
+.lead-meta-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.lead-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.lead-summary-stat,
+.lead-meta-card {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.lead-summary-stat span,
+.lead-meta-card span {
+  display: block;
+  margin-bottom: 6px;
+  color: rgba(148, 163, 184, 0.9);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.lead-summary-stat strong,
+.lead-meta-card strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  font-weight: 700;
+}
+
+.lead-summary-stat.primary,
+.lead-meta-card.primary {
+  background: rgba(37, 99, 235, 0.12);
+  border-color: rgba(96, 165, 250, 0.2);
+}
+
+.lead-summary-stat.alert,
+.lead-meta-card.alert {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(251, 191, 36, 0.18);
+}
+
+.lead-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lead-meta-grid.compact {
+  margin-top: 4px;
+}
+
+.lead-meta-card.wide {
+  grid-column: span 2;
+}
+
+.progression-card {
+  padding: 16px !important;
+  border-radius: 18px !important;
+}
+
+.progression-card p {
+  font-size: 0.92rem !important;
+  line-height: 1.75 !important;
+}
+
+.guidance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+html[dir="rtl"] .lead-hero-top,
+html[dir="rtl"] .lead-chip-row,
+html[dir="rtl"] .guidance-actions {
+  direction: rtl;
+}
+
+html[dir="rtl"] .lead-hero-status {
+  justify-content: flex-start;
+}
+
+@media (max-width: 900px) {
+  .drawer {
+    width: calc(100vw - 16px) !important;
+  }
+
+  .drawer-header {
+    padding: 18px 18px 14px !important;
+  }
+
+  .drawer-body {
+    padding: 16px 16px 22px !important;
+    gap: 12px !important;
+  }
+
+  .drawer-section {
+    padding: 15px !important;
+    border-radius: 18px !important;
+  }
+
+  .lead-hero-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .lead-hero-status {
+    justify-content: flex-start;
+  }
+
+  .lead-summary-grid,
+  .lead-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lead-meta-card.wide {
+    grid-column: auto;
+  }
+}

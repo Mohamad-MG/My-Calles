@@ -2442,6 +2442,27 @@ function fieldRow(label, value) {
   `;
 }
 
+function renderLeadMetaCard(label, value, options = {}) {
+  const toneClass = options.tone ? ` ${options.tone}` : "";
+  const direction = options.dir || inferTextDirection(value);
+  return `
+    <article class="lead-meta-card${toneClass}">
+      <span>${label}</span>
+      <strong dir="${direction}">${value || "—"}</strong>
+    </article>
+  `;
+}
+
+function renderLeadSummaryStat(label, value, options = {}) {
+  const toneClass = options.tone ? ` ${options.tone}` : "";
+  return `
+    <article class="lead-summary-stat${toneClass}">
+      <span>${label}</span>
+      <strong>${value || "—"}</strong>
+    </article>
+  `;
+}
+
 function renderSectorDrawer(sector) {
   const computedStatus = getComputedSectorStatus(sector, todayDate());
   return `
@@ -2493,9 +2514,53 @@ function renderLeadDrawer(lead) {
   const effectiveOperationalState = getEffectiveLeadOperationalState(lead);
   const followUpDueDate = getLeadFollowUpDueDate(lead);
   const followUpTiming = getLeadFollowUpTiming(lead);
+  const isArabic = copy().meta.lang === "ar";
+  const contactLine = `${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}`;
+  const leadStatusLabel = displayStage(computedStage);
+  const channelLabel = displayChannel(lead.channel);
+  const sectorLabel = sector?.sector_name || "—";
+  const firstTouchLabel = lead.first_touch_at ? shortDate(getLeadFirstTouchDate(lead)) : (isArabic ? "لم يتم بعد" : "Not done yet");
+  const followUpLabel = followUpDueDate ? shortDate(followUpDueDate) : (isArabic ? "غير محدد" : "Not scheduled");
+  const respondedLabel = lead.responded_at ? shortDate(getLeadRespondedDate(lead)) : (isArabic ? "لا يوجد" : "Not yet");
+  const lastFollowUpLabel = lead.follow_up_sent_at ? shortDate(getLeadFollowUpSentDate(lead)) : (isArabic ? "لا يوجد" : "None yet");
+  const nextStepDateLabel = lead.next_step_date ? shortDate(lead.next_step_date) : (isArabic ? "غير محدد" : "Not scheduled");
+  const nextActionCopy =
+    needsFirstTouch
+      ? (isArabic
+          ? "هذه الجهة التُقطت لكن ما زالت بلا أول تواصل. لا تتركها معلقة: أضف opener سريع أو سجّل أول تواصل فورًا."
+          : "This lead was captured but still has no first touch. Do not leave it hanging: add a quick opener or log the first touch now.")
+      : effectiveOperationalState === "needs_follow_up"
+        ? (isArabic
+            ? (followUpTiming === "overdue"
+                ? "هذه الجهة متأخرة في المتابعة. أرسل follow-up الآن أو snooze بشكل مقصود."
+                : "هذه الجهة تحتاج متابعة اليوم. نفّذ follow-up الآن أو أجّلها بوضوح.")
+            : (followUpTiming === "overdue"
+                ? "This lead is overdue for follow-up. Send the follow-up now or snooze it deliberately."
+                : "This lead needs follow-up today. Send the follow-up now or snooze it clearly."))
+        : lead.operational_state === "first_touch_done"
+          ? (isArabic
+              ? "تم أول تواصل. إذا أُرسلت المحاولة بالفعل، حرّكها إلى انتظار الرد."
+              : "First touch is done. If the opener has been sent, move it into waiting response.")
+          : effectiveOperationalState === "waiting_response"
+            ? (isArabic
+                ? "هذه الجهة الآن بانتظار الرد. راقب الردود أو جهّز متابعة عند الحاجة."
+                : "This lead is now waiting for a response. Watch for replies or prep follow-up when needed.")
+            : (isArabic
+                ? "اختر الحركة التالية التي تبقي هذا السجل متقدّمًا اليوم."
+                : "Choose the next action that keeps this lead moving today.");
   return `
-    <section class="drawer-section">
-      <h4>${getFieldLabel("leadSnapshot", "Lead Snapshot")}</h4>
+    <section class="drawer-section lead-hero-card">
+      <div class="lead-hero-top">
+        <div class="lead-hero-copy">
+          <p class="drawer-eyebrow">${isArabic ? "سجل الجهة" : "Lead Record"}</p>
+          <h4 dir="${inferTextDirection(lead.company_name)}">${lead.company_name}</h4>
+          <p class="lead-hero-subtitle" dir="auto">${contactLine}</p>
+        </div>
+        <div class="lead-hero-status">
+          <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${leadStatusLabel}</span>
+          <span class="lead-score-pill">${isArabic ? "سكور" : "Score"} ${lead.lead_score}</span>
+        </div>
+      </div>
       ${
         guardFlags.length
           ? `<div class="guard-row">${guardFlags
@@ -2504,49 +2569,39 @@ function renderLeadDrawer(lead) {
           : ""
       }
       ${lead.archived ? `<div class="guard-row"><span class="guard-pill warning">${copy().meta.lang === "ar" ? "مؤرشف" : "Archived"}</span></div>` : ""}
-      ${fieldRow(getFieldLabel("sector", "Sector"), sector?.sector_name)}
-      ${fieldRow(getFieldLabel("contact", "Contact"), `${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}`)}
-      ${fieldRow(getFieldLabel("channel", "Channel"), displayChannel(lead.channel))}
-      ${fieldRow(getFieldLabel("score", "Score"), lead.lead_score)}
-      ${fieldRow(getFieldLabel("painSignal", "Pain Signal"), lead.pain_signal)}
-      ${fieldRow(copy().meta.lang === "ar" ? "الحالة التشغيلية" : "Operational state", getLeadOperationalStateLabel(effectiveOperationalState))}
-      ${fieldRow(copy().meta.lang === "ar" ? "أول تواصل" : "First touch", lead.first_touch_at ? shortDate(getLeadFirstTouchDate(lead)) : (copy().meta.lang === "ar" ? "لم يتم بعد" : "Not done yet"))}
-      ${fieldRow(copy().meta.lang === "ar" ? "استحقاق المتابعة" : "Follow-up due", followUpDueDate ? shortDate(followUpDueDate) : (copy().meta.lang === "ar" ? "غير محدد" : "Not scheduled"))}
-      ${fieldRow(copy().meta.lang === "ar" ? "آخر متابعة" : "Last follow-up", lead.follow_up_sent_at ? shortDate(getLeadFollowUpSentDate(lead)) : (copy().meta.lang === "ar" ? "لا يوجد" : "None yet"))}
-      ${fieldRow(copy().meta.lang === "ar" ? "تم الرد" : "Responded", lead.responded_at ? shortDate(getLeadRespondedDate(lead)) : (copy().meta.lang === "ar" ? "لا يوجد" : "Not yet"))}
-      ${fieldRow(getFieldLabel("interestType", "Interest Type"), displayInterestType(lead.interest_type))}
-      ${fieldRow(getFieldLabel("currentStage", "Current Stage"), displayStage(computedStage))}
-      ${fieldRow(getFieldLabel("shortNote", "Short Note"), lead.notes)}
-      ${fieldRow(getFieldLabel("handoffSummary", "Handoff Summary"), lead.handoff_summary || getValueLabel("notReadyYet", "Not ready yet"))}
+      <div class="lead-chip-row">
+        <span class="lead-chip">${channelLabel}</span>
+        <span class="lead-chip" dir="${inferTextDirection(sectorLabel)}">${sectorLabel}</span>
+        <span class="lead-chip">${getLeadOperationalStateLabel(effectiveOperationalState)}</span>
+      </div>
+      <div class="lead-summary-grid">
+        ${renderLeadSummaryStat(isArabic ? "أول تواصل" : "First touch", firstTouchLabel, { tone: needsFirstTouch ? "alert" : "" })}
+        ${renderLeadSummaryStat(isArabic ? "استحقاق المتابعة" : "Follow-up due", followUpLabel, { tone: followUpTiming === "overdue" ? "alert" : "" })}
+        ${renderLeadSummaryStat(isArabic ? "آخر متابعة" : "Last follow-up", lastFollowUpLabel)}
+        ${renderLeadSummaryStat(isArabic ? "تم الرد" : "Responded", respondedLabel, { tone: lead.responded_at ? "primary" : "" })}
+      </div>
+      <div class="lead-meta-grid">
+        ${renderLeadMetaCard(getFieldLabel("painSignal", "Pain Signal"), lead.pain_signal || getValueLabel("noSignalCaptured", "No signal captured yet."), { tone: "wide", dir: inferTextDirection(lead.pain_signal || lead.notes) })}
+        ${renderLeadMetaCard(getFieldLabel("nextStep", "Next Step"), lead.next_step || getValueLabel("noImmediateNextStep", "No immediate next step"), { tone: "wide", dir: inferTextDirection(lead.next_step) })}
+      </div>
+    </section>
+    <section class="drawer-section">
+      <h4>${isArabic ? "ملخص الجهة" : "Lead Snapshot"}</h4>
+      <div class="lead-meta-grid compact">
+        ${renderLeadMetaCard(getFieldLabel("sector", "Sector"), sectorLabel)}
+        ${renderLeadMetaCard(getFieldLabel("channel", "Channel"), channelLabel, { dir: "auto" })}
+        ${renderLeadMetaCard(getFieldLabel("contact", "Contact"), contactLine, { dir: "auto" })}
+        ${renderLeadMetaCard(getFieldLabel("interestType", "Interest Type"), displayInterestType(lead.interest_type))}
+        ${renderLeadMetaCard(getFieldLabel("currentStage", "Current Stage"), leadStatusLabel)}
+        ${renderLeadMetaCard(isArabic ? "تاريخ الخطوة التالية" : "Next step date", nextStepDateLabel)}
+        ${renderLeadMetaCard(getFieldLabel("shortNote", "Short Note"), lead.notes || getValueLabel("noAdditionalNote", "No additional note"), { tone: "wide", dir: inferTextDirection(lead.notes) })}
+        ${renderLeadMetaCard(getFieldLabel("handoffSummary", "Handoff Summary"), lead.handoff_summary || getValueLabel("notReadyYet", "Not ready yet"), { tone: "wide", dir: inferTextDirection(lead.handoff_summary) })}
+      </div>
     </section>
     <section class="drawer-section">
       <h4>${copy().meta.lang === "ar" ? "الخطوة التنفيذية التالية" : "Next Execution Step"}</h4>
       <div class="progression-card">
-        <p>${
-          needsFirstTouch
-            ? (copy().meta.lang === "ar"
-                ? "هذه الجهة التُقطت لكن ما زالت بلا أول تواصل. لا تتركها معلقة: أضف opener سريع أو سجّل أول تواصل فورًا."
-                : "This lead was captured but still has no first touch. Do not leave it hanging: add a quick opener or log the first touch now.")
-            : effectiveOperationalState === "needs_follow_up"
-              ? (copy().meta.lang === "ar"
-                  ? (followUpTiming === "overdue"
-                      ? "هذه الجهة متأخرة في المتابعة. أرسل follow-up الآن أو snooze بشكل مقصود."
-                      : "هذه الجهة تحتاج متابعة اليوم. نفّذ follow-up الآن أو أجّلها بوضوح.")
-                  : (followUpTiming === "overdue"
-                      ? "This lead is overdue for follow-up. Send the follow-up now or snooze it deliberately."
-                      : "This lead needs follow-up today. Send the follow-up now or snooze it clearly."))
-            : lead.operational_state === "first_touch_done"
-              ? (copy().meta.lang === "ar"
-                  ? "تم أول تواصل. إذا أُرسلت المحاولة بالفعل، حرّكها إلى انتظار الرد."
-                  : "First touch is done. If the opener has been sent, move it into waiting response.")
-              : effectiveOperationalState === "waiting_response"
-                ? (copy().meta.lang === "ar"
-                    ? "هذه الجهة الآن بانتظار الرد. راقب الردود أو جهّز متابعة عند الحاجة."
-                    : "This lead is now waiting for a response. Watch for replies or prep follow-up when needed.")
-                : (copy().meta.lang === "ar"
-                    ? "اختر الحركة التالية التي تبقي هذا السجل متقدّمًا اليوم."
-                    : "Choose the next action that keeps this lead moving today.")
-        }</p>
+        <p>${nextActionCopy}</p>
         <div class="guidance-actions">
           ${needsFirstTouch ? `<button class="success-button tight" type="button" data-mark-first-touch="${lead.id}">${copy().meta.lang === "ar" ? "تم أول تواصل" : "Mark first touch done"}</button>` : ""}
           ${effectiveOperationalState !== "waiting_response" && effectiveOperationalState !== "needs_follow_up" && effectiveOperationalState !== "responded" ? `<button class="ghost-button tight" type="button" data-mark-waiting-response="${lead.id}">${copy().meta.lang === "ar" ? "بانتظار الرد" : "Move to waiting response"}</button>` : ""}
