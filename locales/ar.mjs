@@ -7,7 +7,7 @@ const arLocale = {
     productName: "ماي كولز",
     brandMark: "مك",
     brandEyebrow: "محرك الإيراد",
-    dashboardEyebrow: "لوحة تشغيلية",
+    dashboardEyebrow: "",
     fallbackTitle: "تعذر تشغيل لوحة ماي كولز",
     fallbackMessage:
       "هذه اللوحة لا تعمل عند فتح الملف مباشرة. افتحها من صفحات جيت هب أو من رابط محلي.",
@@ -38,10 +38,10 @@ const arLocale = {
       no: "لا",
     },
     storage: {
-      savedLocally: (time) => `محفوظ ${time}`,
-      localLoaded: "محفوظ",
-      seedMode: "تم استرجاع البيانات التجريبية",
-      memoryOnly: "تعذر التخزين",
+      savedLocally: (time) => `${time}`,
+      localLoaded: "",
+      seedMode: "استبصار",
+      memoryOnly: "ذاكرة",
     },
     buttons: {
       restoreSeed: "استرجاع البيانات التجريبية",
