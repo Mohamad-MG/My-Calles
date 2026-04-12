@@ -5998,3 +5998,26 @@ html[dir="rtl"] .drawer {
     max-height: calc(100vh - 104px);
   }
 }
+
+/* ── KPI Strip: High Density Single Row Enforcer ── */
+.top-strip.metrics-strip {
+  grid-template-columns: repeat(9, minmax(0, 1fr)) !important;
+}
+
+@media (max-width: 1300px) {
+  .top-strip.metrics-strip {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .top-strip.metrics-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .top-strip.metrics-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
