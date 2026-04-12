@@ -4275,3 +4275,1549 @@ button.queue-item:hover,
   border-color: rgba(151, 208, 255, 0.16);
   box-shadow: 0 18px 38px rgba(0, 8, 22, 0.26);
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Flat Color Correction Pass
+   Remove gradients, fix component colors, normalize controls
+══════════════════════════════════════════════════════════════ */
+
+:root {
+  --canvas: #07101b;
+  --canvas-elevated: rgba(13, 20, 33, 0.88);
+  --canvas-quiet: rgba(16, 24, 40, 0.82);
+  --canvas-sunken: rgba(9, 15, 26, 0.92);
+  --text-primary: #eef4ff;
+  --text-secondary: rgba(201, 213, 233, 0.78);
+  --text-tertiary: rgba(134, 151, 180, 0.72);
+  --text-inverse: #f8fbff;
+  --accent: #67adff;
+  --accent-strong: #8bc3ff;
+  --accent-dim: rgba(103, 173, 255, 0.12);
+  --accent-mid: rgba(103, 173, 255, 0.18);
+  --accent-light: rgba(103, 173, 255, 0.08);
+  --danger: #ff8f86;
+  --danger-dim: rgba(255, 143, 134, 0.12);
+  --danger-mid: rgba(255, 143, 134, 0.18);
+  --warning: #efbc72;
+  --warning-dim: rgba(239, 188, 114, 0.12);
+  --warning-mid: rgba(239, 188, 114, 0.18);
+  --success: #67d5a2;
+  --success-dim: rgba(103, 213, 162, 0.12);
+  --success-mid: rgba(103, 213, 162, 0.18);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --sidebar-bg: rgba(8, 14, 24, 0.96);
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-text: rgba(202, 214, 236, 0.78);
+  --sidebar-text-dim: rgba(128, 145, 174, 0.72);
+  --sidebar-active: rgba(103, 173, 255, 0.12);
+  --sidebar-active-txt: #f4f8ff;
+  --hero-bg: rgba(10, 17, 28, 0.9);
+  --hero-border: rgba(255, 255, 255, 0.08);
+  --hero-text: #f4f8ff;
+  --hero-muted: rgba(201, 213, 233, 0.72);
+  --hero-row: rgba(255, 255, 255, 0.04);
+  --hero-row-border: rgba(255, 255, 255, 0.07);
+  --glass-panel: rgba(14, 21, 35, 0.86);
+  --glass-panel-strong: rgba(11, 17, 29, 0.92);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-soft: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 18px 34px rgba(0, 8, 20, 0.24);
+  --glass-shadow-soft: 0 12px 24px rgba(0, 8, 20, 0.18);
+}
+
+html,
+body {
+  background: #07101b !important;
+}
+
+body::before,
+body::after,
+.command-zone::before,
+.command-zone::after,
+.topbar::before,
+.filters::before,
+.intent-section::before,
+.bottom-zone::before,
+.workflow-column::before,
+.rail-panel::before,
+.kpi-cell::before,
+.system-row::before,
+.source-card::before,
+.drawer-section::before,
+.stat-card::before {
+  display: none !important;
+}
+
+body {
+  background-image: none !important;
+  color: var(--text-primary);
+}
+
+.sidebar,
+.topbar,
+.filters,
+.command-zone,
+.command-zone.light,
+.intent-section,
+.bottom-zone,
+.workflow-column,
+.rail-panel,
+.kpi-cell,
+.system-row,
+.source-card,
+.kanban-card,
+.queue-item,
+.drawer,
+.drawer-header,
+.drawer-section,
+.flash-banner,
+.empty-state,
+.playbook-grid > div,
+.detail-grid.tight > div,
+.source-progression .rail-item,
+.source-progression button.rail-item,
+.rules-list li,
+.sidebar-panel.system-panel {
+  background-image: none !important;
+}
+
+.sidebar {
+  background-color: var(--sidebar-bg) !important;
+  box-shadow: 0 22px 42px rgba(0, 7, 18, 0.22);
+}
+
+.topbar,
+.filters {
+  background-color: rgba(10, 16, 27, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 10px 24px rgba(0, 8, 20, 0.16);
+}
+
+.topbar .eyebrow,
+.filters label span,
+.panel-label,
+.eyebrow,
+.sidebar-section-label,
+.drawer-section label span,
+.rule-tile span,
+.kpi-cell span,
+.system-label {
+  color: var(--text-tertiary);
+}
+
+#screen-title,
+.intent-head h3,
+.panel-head h3,
+.kanban-header h3,
+.rule-tile strong,
+.system-row-main strong,
+.drawer-header h3,
+.drawer-section h4,
+.detail-row strong,
+.agent-stats strong,
+.queue-item strong,
+.command-zone h2,
+.command-zone.light h2 {
+  color: var(--text-primary);
+}
+
+.meta-row,
+.mixed-meta,
+.sidebar-copy,
+.sidebar-note,
+.empty-copy,
+.flash-message,
+.card-summary,
+.playbook-list li,
+.detail-row span,
+.agent-stats span,
+.command-signal,
+.command-zone.light .command-signal,
+.command-zone.light .meta-row,
+.command-zone.light .mixed-meta,
+.command-zone.light .zone-copy {
+  color: var(--text-secondary);
+}
+
+.nav-link {
+  background: transparent;
+  color: var(--sidebar-text);
+}
+
+.nav-link:hover {
+  background: var(--sidebar-hover);
+}
+
+.nav-link.active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-active-txt);
+  box-shadow: 0 0 0 1px rgba(103, 173, 255, 0.14) inset;
+}
+
+.brand-mark,
+.primary-button,
+.success-button,
+.danger-button,
+.command-row-cta .primary-button {
+  background-image: none !important;
+}
+
+.brand-mark {
+  background-color: #4d84ff !important;
+  box-shadow: 0 0 0 1px rgba(121, 177, 255, 0.18) inset;
+}
+
+.ghost-button,
+.icon-button,
+.lang-toggle,
+.command-row-cta .ghost-button,
+.command-zone.light .command-row-cta .ghost-button {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.ghost-button:hover,
+.icon-button:hover,
+.lang-toggle:hover,
+.command-row-cta .ghost-button:hover,
+.command-zone.light .command-row-cta .ghost-button:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+.primary-button,
+.command-row-cta .primary-button {
+  background-color: #4d84ff !important;
+  border-color: rgba(121, 177, 255, 0.3);
+  box-shadow: 0 0 0 1px rgba(121, 177, 255, 0.16) inset, 0 0 18px rgba(77, 132, 255, 0.1);
+}
+
+.primary-button:hover,
+.command-row-cta .primary-button:hover {
+  background-color: #5a91ff !important;
+}
+
+.success-button {
+  background-color: #2aa574 !important;
+  border-color: rgba(103, 213, 162, 0.24);
+  box-shadow: none;
+}
+
+.danger-button {
+  background-color: #d9645a !important;
+  border-color: rgba(255, 143, 134, 0.24);
+  box-shadow: none;
+}
+
+.kpi-cell,
+.intent-section,
+.bottom-zone,
+.workflow-column,
+.rail-panel,
+.system-row,
+.source-card,
+.kanban-card,
+.queue-item,
+.drawer-section,
+.flash-banner,
+.empty-state,
+.playbook-grid > div,
+.detail-grid.tight > div,
+.source-progression .rail-item,
+.source-progression button.rail-item,
+.rules-list li {
+  background-color: rgba(14, 21, 35, 0.88) !important;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 22px rgba(0, 8, 20, 0.14);
+}
+
+.command-zone,
+.command-zone.light {
+  background-color: rgba(9, 15, 25, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 30px rgba(0, 8, 20, 0.18);
+}
+
+.command-zone.light .command-company strong,
+.command-zone.light .command-next,
+.command-zone.light .panel-label,
+.command-zone.light .badge,
+.command-zone.light .source-badge {
+  color: var(--text-primary);
+}
+
+.command-zone-stats > div {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.command-row {
+  background-color: rgba(255, 255, 255, 0.035) !important;
+  border-color: rgba(255, 255, 255, 0.07);
+  box-shadow: none;
+}
+
+.command-row:hover {
+  background-color: rgba(255, 255, 255, 0.055) !important;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 22px rgba(0, 8, 20, 0.16);
+}
+
+.command-row::before {
+  width: 3px;
+  inset-inline-start: 0;
+  top: 10px;
+  bottom: 10px;
+  border-radius: 0 999px 999px 0;
+}
+
+html[lang="ar"] .command-row::before {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  border-radius: 999px 0 0 999px;
+}
+
+.command-row.urgency-accent::before,
+.command-row.critical::before {
+  background: #67adff;
+  box-shadow: 0 0 12px rgba(103, 173, 255, 0.24);
+}
+
+.command-row.urgency-warning::before,
+.command-row.active::before {
+  background: #efbc72;
+  box-shadow: 0 0 12px rgba(239, 188, 114, 0.22);
+}
+
+.command-row.urgency-danger::before {
+  background: #ff8f86;
+  box-shadow: 0 0 12px rgba(255, 143, 134, 0.22);
+}
+
+.command-row.active,
+.system-row.warning {
+  box-shadow: 0 12px 22px rgba(0, 8, 20, 0.16);
+}
+
+.command-row.critical.urgency-accent,
+.command-row.critical.urgency-danger {
+  box-shadow: 0 12px 24px rgba(0, 8, 20, 0.18);
+}
+
+.badge,
+.pill,
+.guard-pill,
+.storage-pill,
+.source-badge,
+.command-zone.light .badge,
+.command-zone.light .source-badge {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.badge.warning,
+.pill.warning,
+.command-zone.light .badge.warning {
+  background-color: rgba(239, 188, 114, 0.12) !important;
+  border-color: rgba(239, 188, 114, 0.18);
+  color: #ffdca7;
+}
+
+.badge.accent,
+.command-zone.light .badge.accent {
+  background-color: rgba(103, 173, 255, 0.12) !important;
+  border-color: rgba(103, 173, 255, 0.18);
+  color: #dcecff;
+}
+
+.badge.danger,
+.pill.danger,
+.guard-pill.danger,
+.command-zone.light .badge.danger {
+  background-color: rgba(255, 143, 134, 0.12) !important;
+  border-color: rgba(255, 143, 134, 0.18);
+  color: #ffd3ce;
+}
+
+.storage-pill,
+.storage-pill.warning {
+  box-shadow: none;
+}
+
+.drawer,
+.drawer-header {
+  background-color: rgba(10, 16, 27, 0.96) !important;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 44px rgba(0, 8, 20, 0.28);
+}
+
+.drawer-body {
+  background: transparent;
+}
+
+.drawer-section input,
+.drawer-section select,
+.drawer-section textarea,
+.filters select {
+  background-color: rgba(255, 255, 255, 0.045) !important;
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+.drawer-section select,
+.filters select {
+  color-scheme: dark;
+}
+
+.drawer-section select option,
+.filters select option,
+select option,
+option {
+  background: #0d1523;
+  color: #eef4ff;
+}
+
+.drawer-section select optgroup,
+.filters select optgroup,
+select optgroup {
+  background: #0d1523;
+  color: #8ea0be;
+}
+
+.flash-banner.guidance-banner,
+.drawer-body > .flash-message {
+  background-color: rgba(103, 173, 255, 0.08) !important;
+  border-color: rgba(103, 173, 255, 0.12);
+  color: #dcecff;
+  box-shadow: none;
+}
+
+.empty-state {
+  opacity: 1;
+  border-style: solid;
+}
+
+.detail-grid.tight span {
+  color: var(--text-tertiary);
+}
+
+.detail-grid.tight strong {
+  color: var(--text-primary);
+}
+
+.system-row:hover,
+.source-card:hover,
+.kanban-card:hover,
+button.rail-item:hover,
+button.queue-item:hover,
+.source-progression button.rail-item:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 22px rgba(0, 8, 20, 0.16);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Premium B2B SaaS Normalization Pass
+   Strict palette, flat surfaces, disciplined borders/buttons
+══════════════════════════════════════════════════════════════ */
+
+:root {
+  --canvas: #020617;
+  --canvas-elevated: #0f172a;
+  --canvas-quiet: #0f172a;
+  --canvas-sunken: #0f172a;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
+  --text-inverse: #eff6ff;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-dim: rgba(37, 99, 235, 0.14);
+  --accent-mid: rgba(37, 99, 235, 0.22);
+  --accent-light: rgba(37, 99, 235, 0.08);
+  --success: #16a34a;
+  --success-dim: rgba(22, 163, 74, 0.12);
+  --success-mid: rgba(22, 163, 74, 0.2);
+  --warning: #f59e0b;
+  --warning-dim: rgba(245, 158, 11, 0.12);
+  --warning-mid: rgba(245, 158, 11, 0.18);
+  --danger: #ef4444;
+  --danger-dim: rgba(239, 68, 68, 0.12);
+  --danger-mid: rgba(239, 68, 68, 0.18);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.1);
+  --border-focus: rgba(37, 99, 235, 0.34);
+  --sidebar-bg: #0b1220;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-hover: rgba(255, 255, 255, 0.04);
+  --sidebar-text: #cbd5e1;
+  --sidebar-text-dim: #94a3b8;
+  --sidebar-active: rgba(37, 99, 235, 0.14);
+  --sidebar-active-txt: #eff6ff;
+  --hero-bg: #111827;
+  --hero-border: rgba(255, 255, 255, 0.08);
+  --hero-text: #f8fafc;
+  --hero-muted: #cbd5e1;
+  --hero-row: #0f172a;
+  --hero-row-border: rgba(255, 255, 255, 0.08);
+  --glass-panel: #0f172a;
+  --glass-panel-strong: #111827;
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-soft: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 18px 38px rgba(2, 6, 23, 0.34);
+  --glass-shadow-soft: 0 10px 24px rgba(2, 6, 23, 0.24);
+}
+
+html,
+body {
+  background: var(--canvas) !important;
+}
+
+body,
+.app-shell,
+.main {
+  color: var(--text-primary);
+  background-image: none !important;
+}
+
+.brand-mark,
+.topbar,
+.filters,
+.sidebar,
+.sidebar-panel.system-panel,
+.command-zone,
+.command-zone.light,
+.hero-card,
+.panel,
+.stat-card,
+.kpi-cell,
+.intent-section,
+.bottom-zone,
+.workflow-column,
+.rail-panel,
+.system-row,
+.source-card,
+.kanban-card,
+.kanban-column,
+.queue-item,
+.channel-block,
+.rail-item,
+.drawer,
+.drawer-header,
+.drawer-section,
+.flash-banner,
+.empty-state,
+.playbook-grid > div,
+.detail-grid.tight > div,
+.source-progression .rail-item,
+.source-progression button.rail-item,
+.rules-list li,
+.source-tab {
+  background-image: none !important;
+}
+
+.sidebar {
+  background-color: var(--sidebar-bg) !important;
+  border-color: var(--sidebar-border);
+  box-shadow: 0 18px 34px rgba(2, 6, 23, 0.28);
+}
+
+.topbar,
+.filters,
+.sidebar-panel.system-panel,
+.hero-card,
+.panel,
+.stat-card,
+.kpi-cell,
+.intent-section,
+.bottom-zone,
+.workflow-column,
+.rail-panel,
+.system-row,
+.source-card,
+.kanban-card,
+.kanban-column,
+.queue-item,
+.channel-block,
+.rail-item,
+.drawer,
+.drawer-header,
+.drawer-section,
+.flash-banner,
+.empty-state,
+.playbook-grid > div,
+.detail-grid.tight > div,
+.source-progression .rail-item,
+.source-progression button.rail-item,
+.rules-list li,
+.source-tab {
+  background-color: var(--canvas-elevated) !important;
+  border-color: var(--border);
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.command-zone,
+.command-zone.light {
+  background-color: var(--hero-bg) !important;
+  border-color: var(--hero-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.command-zone-stats > div,
+.source-stat-strip > .stat-card,
+.analysis-grid > article.panel:nth-child(2) .empty-state,
+.drawer-body > .flash-message,
+.flash-banner.guidance-banner {
+  background: var(--canvas-elevated) !important;
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.topbar .eyebrow,
+.filters label span,
+.panel-label,
+.eyebrow,
+.sidebar-section-label,
+.drawer-section label span,
+.rule-tile span,
+.kpi-cell span,
+.system-label,
+.drawer-header .eyebrow {
+  color: var(--text-tertiary);
+}
+
+#screen-title,
+.intent-head h3,
+.panel-head h3,
+.kanban-header h3,
+.rule-tile strong,
+.system-row-main strong,
+.drawer-header h3,
+.drawer-section h4,
+.detail-row strong,
+.agent-stats strong,
+.queue-item strong,
+.command-zone h2,
+.command-zone.light h2,
+.command-company strong,
+.command-next {
+  color: var(--text-primary);
+}
+
+.meta-row,
+.mixed-meta,
+.sidebar-copy,
+.sidebar-note,
+.empty-copy,
+.flash-message,
+.card-summary,
+.playbook-list li,
+.detail-row span,
+.agent-stats span,
+.command-signal,
+.command-zone.light .command-signal,
+.command-zone.light .meta-row,
+.command-zone.light .mixed-meta,
+.command-zone.light .zone-copy,
+.command-zone .panel-label,
+.command-zone.light .panel-label {
+  color: var(--text-secondary);
+}
+
+.nav-link {
+  background: transparent;
+  color: var(--sidebar-text);
+}
+
+.nav-link:hover {
+  background: var(--sidebar-hover);
+}
+
+.nav-link.active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-active-txt);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.18);
+}
+
+.brand-mark,
+.primary-button,
+.success-button,
+.danger-button,
+.command-row-cta .primary-button,
+.source-card-actions .ghost-button[data-convert-lead],
+.rail-item .ghost-button[data-convert-lead],
+.action-rail-item .ghost-button[data-convert-lead],
+.bar-fill {
+  background-image: none !important;
+}
+
+.brand-mark {
+  background-color: var(--accent) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.ghost-button,
+.icon-button,
+.lang-toggle,
+.command-row-cta .ghost-button,
+.command-zone.light .command-row-cta .ghost-button,
+.source-card-actions .ghost-button {
+  background: transparent !important;
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+
+.ghost-button:hover,
+.icon-button:hover,
+.lang-toggle:hover,
+.command-row-cta .ghost-button:hover,
+.command-zone.light .command-row-cta .ghost-button:hover,
+.source-card-actions .ghost-button:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.primary-button,
+.command-row-cta .primary-button,
+.source-card-actions .ghost-button[data-convert-lead],
+.rail-item .ghost-button[data-convert-lead],
+.action-rail-item .ghost-button[data-convert-lead] {
+  background: var(--accent) !important;
+  color: var(--text-inverse);
+  border-color: var(--accent);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
+.primary-button:hover,
+.command-row-cta .primary-button:hover,
+.source-card-actions .ghost-button[data-convert-lead]:hover,
+.rail-item .ghost-button[data-convert-lead]:hover,
+.action-rail-item .ghost-button[data-convert-lead]:hover {
+  background: var(--accent-strong) !important;
+  border-color: var(--accent-strong);
+}
+
+.success-button {
+  background: var(--success) !important;
+  color: var(--text-inverse);
+  border-color: var(--success);
+  box-shadow: 0 8px 18px rgba(22, 163, 74, 0.18);
+}
+
+.success-button:hover {
+  background: #15803d !important;
+  border-color: #15803d;
+}
+
+.danger-button {
+  background: var(--danger) !important;
+  color: var(--text-inverse);
+  border-color: var(--danger);
+  box-shadow: none;
+}
+
+.filters select,
+.drawer-section input,
+.drawer-section select,
+.drawer-section textarea {
+  background: var(--canvas-elevated) !important;
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+
+.filters select:focus,
+.drawer-section input:focus,
+.drawer-section select:focus,
+.drawer-section textarea:focus,
+.ghost-button:focus-visible,
+.primary-button:focus-visible,
+.success-button:focus-visible,
+.command-row-main:focus-visible,
+.system-row:focus-visible,
+.nav-link:focus-visible,
+.source-card-main:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.drawer-section select,
+.filters select {
+  color-scheme: dark;
+}
+
+.drawer-section select option,
+.filters select option,
+select option,
+option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.drawer-section select optgroup,
+.filters select optgroup,
+select optgroup {
+  background: #0f172a;
+  color: #94a3b8;
+}
+
+.badge,
+.pill,
+.guard-pill,
+.storage-pill,
+.source-badge,
+.command-zone.light .badge,
+.command-zone.light .source-badge {
+  background: rgba(148, 163, 184, 0.08) !important;
+  color: var(--text-secondary);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.badge.accent,
+.command-zone.light .badge.accent,
+.source-badge {
+  background: var(--accent-light) !important;
+  color: #bfdbfe;
+  border-color: var(--accent-mid);
+}
+
+.badge.warning,
+.pill.warning,
+.command-zone.light .badge.warning {
+  background: var(--warning-dim) !important;
+  color: #fcd34d;
+  border-color: var(--warning-mid);
+}
+
+.badge.danger,
+.pill.danger,
+.guard-pill.danger,
+.command-zone.light .badge.danger {
+  background: var(--danger-dim) !important;
+  color: #fca5a5;
+  border-color: var(--danger-mid);
+}
+
+.badge.success,
+.pill.success,
+.storage-pill.warning {
+  background: var(--success-dim) !important;
+  color: #86efac;
+  border-color: var(--success-mid);
+}
+
+.kpi-cell.primary,
+.kpi-cell.alert,
+.system-row.warning,
+.analysis-grid > article.panel:nth-child(2) .pill,
+.analysis-grid > article.panel:nth-child(2) .empty-state {
+  background: var(--canvas-elevated) !important;
+  border-color: var(--border);
+  color: inherit;
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.kpi-cell.primary strong,
+.kpi-cell.alert strong,
+.analysis-grid > article.panel:nth-child(2) h3,
+.analysis-grid > article.panel:nth-child(2) .panel-label {
+  color: var(--text-primary);
+}
+
+.command-row {
+  background: var(--hero-row) !important;
+  border-color: var(--hero-row-border);
+  box-shadow: none;
+}
+
+.command-row:hover {
+  background: #132036 !important;
+  border-color: var(--border-strong);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.24);
+}
+
+.command-row::before {
+  opacity: 0;
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.command-row.active,
+.command-row.critical,
+.command-row.urgency-accent,
+.command-row.urgency-warning,
+.command-row.urgency-danger {
+  border-color: rgba(37, 99, 235, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.1);
+}
+
+.command-row.active::before,
+.command-row.critical::before,
+.command-row.urgency-accent::before,
+.command-row.urgency-warning::before,
+.command-row.urgency-danger::before {
+  opacity: 1;
+}
+
+.bar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
+}
+
+.bar-fill {
+  background: var(--accent) !important;
+}
+
+.empty-state {
+  border-style: solid;
+  color: var(--text-secondary);
+}
+
+.system-row:hover,
+.source-card:hover,
+.kanban-card:hover,
+button.rail-item:hover,
+button.queue-item:hover,
+.source-progression button.rail-item:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.24);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Final Visual Balance Pass
+   Calm polish across chrome, rows, panels, drawers, and states
+══════════════════════════════════════════════════════════════ */
+
+:root {
+  --canvas: #030712;
+  --canvas-elevated: #0f172a;
+  --canvas-quiet: #10192d;
+  --canvas-sunken: #0b1220;
+  --hero-bg: #111827;
+  --hero-row: #0f172a;
+  --hero-row-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 18px 38px rgba(2, 6, 23, 0.32);
+  --glass-shadow-soft: 0 12px 24px rgba(2, 6, 23, 0.22);
+}
+
+body,
+.app-shell,
+.main,
+.content {
+  background: var(--canvas) !important;
+}
+
+.content {
+  padding: 20px 18px 32px;
+}
+
+.command-deck,
+.source-board,
+.source-main,
+.source-progression {
+  gap: 18px;
+}
+
+.top-strip.metrics-strip,
+.operational-grid,
+.source-ops-grid,
+.source-layout,
+.source-workflow,
+.playbook-grid,
+.detail-grid.tight,
+.rule-grid {
+  gap: 12px;
+}
+
+.sidebar {
+  padding: 14px 10px 18px;
+  gap: 14px;
+}
+
+.brand {
+  padding: 4px 8px 12px;
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+}
+
+.sidebar-panel.system-panel {
+  padding: 14px;
+  border-radius: 16px;
+  background-color: #0f172a !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.sidebar-panel-tag {
+  border-color: rgba(37, 99, 235, 0.16);
+  background: rgba(37, 99, 235, 0.08);
+  color: #bfdbfe;
+}
+
+.focus-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  color: #dbeafe;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.sidebar-copy {
+  line-height: 1.55;
+}
+
+.sidebar-note {
+  line-height: 1.5;
+}
+
+.rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rules-list li {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02) !important;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.nav-link {
+  min-height: 38px;
+  padding: 8px 11px;
+  border-radius: 12px;
+  font-size: 0.82rem;
+}
+
+.topbar {
+  min-height: 64px;
+  height: auto;
+  padding: 12px 18px;
+  border-radius: 18px;
+}
+
+.topbar-utility,
+#screen-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#screen-actions {
+  justify-content: flex-end;
+}
+
+.topbar-actions {
+  gap: 8px;
+}
+
+.filters {
+  padding: 13px 16px;
+  border-radius: 18px;
+}
+
+.filters label {
+  min-width: 136px;
+  gap: 6px;
+}
+
+.filters select,
+.drawer-section input,
+.drawer-section select,
+.drawer-section textarea {
+  border-radius: 12px;
+}
+
+.filters select {
+  height: 38px;
+  padding-inline: 12px 34px;
+}
+
+.ghost-button,
+.icon-button,
+.lang-toggle,
+.primary-button,
+.success-button,
+.danger-button {
+  min-height: 36px;
+  padding-inline: 12px;
+  border-radius: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.storage-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding-inline: 10px;
+  border-radius: 999px;
+}
+
+.kpi-cell,
+.intent-section,
+.bottom-zone,
+.workflow-column,
+.rail-panel,
+.system-row,
+.source-card,
+.kanban-card,
+.queue-item,
+.rail-item,
+.channel-block,
+.drawer-section,
+.flash-banner,
+.empty-state,
+.playbook-grid > div,
+.detail-grid.tight > div,
+.source-progression .rail-item,
+.source-progression button.rail-item,
+.source-tab,
+.stat-card {
+  border-radius: 18px;
+}
+
+.kpi-cell {
+  min-height: 102px;
+  padding: 16px 18px;
+  justify-content: space-between;
+}
+
+.kpi-cell span {
+  font-size: 0.66rem;
+  letter-spacing: 0.07em;
+}
+
+.kpi-cell strong {
+  font-size: clamp(2.1rem, 4vw, 2.7rem);
+}
+
+.kpi-cell.primary {
+  border-color: rgba(37, 99, 235, 0.16);
+}
+
+.kpi-cell.alert {
+  border-color: rgba(245, 158, 11, 0.16);
+}
+
+.kpi-cell.primary strong {
+  color: #dbeafe;
+}
+
+.command-zone,
+.command-zone.light {
+  padding: 20px;
+  border-radius: 22px;
+}
+
+.command-zone-head,
+.intent-head,
+.panel-head,
+.kanban-header {
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.command-zone h2,
+.command-zone.light h2 {
+  font-size: clamp(1.55rem, 2.4vw, 2.05rem);
+  line-height: 1.08;
+}
+
+.zone-copy {
+  margin-top: 8px;
+  max-width: 680px;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.command-zone-stats {
+  gap: 8px;
+}
+
+.command-zone-stats > div {
+  min-width: 102px;
+  padding: 11px 12px;
+  border-radius: 14px;
+}
+
+.command-zone-stats strong {
+  font-size: 1.12rem;
+}
+
+.command-zone-list,
+.intent-list {
+  gap: 8px;
+}
+
+.command-row,
+.command-row.compact {
+  grid-template-columns: minmax(0, 1.15fr) minmax(170px, 0.95fr) minmax(170px, 0.9fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 14px 18px;
+  border-radius: 18px;
+}
+
+.command-row::before {
+  inset-inline-start: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 0 999px 999px 0;
+}
+
+html[lang="ar"] .command-row::before {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  border-radius: 999px 0 0 999px;
+}
+
+.command-row:hover {
+  background: #12203a !important;
+}
+
+.command-row.active,
+.command-row.critical,
+.command-row.urgency-accent,
+.command-row.urgency-warning,
+.command-row.urgency-danger {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.command-row.urgency-accent,
+.command-row.critical {
+  border-color: rgba(37, 99, 235, 0.18);
+}
+
+.command-row.urgency-warning,
+.command-row.active {
+  border-color: rgba(245, 158, 11, 0.16);
+}
+
+.command-row.urgency-danger {
+  border-color: rgba(239, 68, 68, 0.16);
+}
+
+.command-company strong {
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.mixed-meta {
+  font-size: 0.73rem;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.command-signal,
+.command-next {
+  font-size: 0.79rem;
+  line-height: 1.45;
+}
+
+.command-next {
+  color: #e2e8f0;
+}
+
+.command-row-meta {
+  gap: 5px;
+  align-content: flex-start;
+}
+
+html[dir="rtl"] .command-row-meta,
+html[dir="rtl"] .command-row-cta {
+  justify-content: flex-start;
+}
+
+.command-row .badge,
+.command-row .source-badge,
+.system-row .source-badge {
+  padding: 4px 8px;
+  font-size: 0.67rem;
+  line-height: 1.2;
+}
+
+.command-urgency {
+  letter-spacing: 0;
+}
+
+.command-row-cta {
+  min-width: auto;
+}
+
+.command-row-cta .primary-button,
+.command-row-cta .ghost-button {
+  min-width: 84px;
+  min-height: 32px;
+  padding-inline: 12px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+}
+
+.intent-section,
+.bottom-zone {
+  padding: 18px;
+}
+
+.system-row {
+  min-height: 72px;
+  padding: 12px 14px;
+  border-radius: 16px;
+}
+
+.system-row-main {
+  gap: 4px;
+}
+
+.system-row-main strong {
+  font-size: 0.92rem;
+}
+
+.system-row .meta-row {
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.system-number {
+  font-size: 1.18rem;
+}
+
+.rule-tile {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--canvas-quiet) !important;
+}
+
+.rule-tile strong {
+  color: #e2e8f0;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.workflow-column,
+.rail-panel,
+.source-card,
+.kanban-card,
+.queue-item,
+.rail-item,
+.source-progression .rail-item,
+.source-progression button.rail-item,
+.playbook-grid > div,
+.detail-grid.tight > div {
+  background: var(--canvas-elevated) !important;
+}
+
+.workflow-column,
+.rail-panel {
+  padding: 14px;
+}
+
+.source-tab {
+  min-height: 72px;
+  padding: 11px 13px;
+}
+
+.source-tab.active {
+  background: rgba(37, 99, 235, 0.1) !important;
+  border-color: rgba(37, 99, 235, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
+.source-card-main,
+.kanban-card,
+button.rail-item,
+.queue-item {
+  padding: 13px 14px;
+}
+
+.source-card-main {
+  gap: 8px;
+}
+
+.source-card-actions,
+.card-footer {
+  padding: 10px 14px 14px;
+}
+
+.source-card-actions {
+  gap: 8px;
+}
+
+.source-card-actions .ghost-button,
+.source-card-actions .success-button,
+.source-card-actions .primary-button {
+  min-height: 34px;
+}
+
+.playbook-grid > div,
+.detail-grid.tight > div {
+  min-height: 104px;
+  padding: 14px;
+}
+
+.detail-grid.tight span {
+  margin-bottom: 6px;
+}
+
+.flash-banner.guidance-banner,
+.drawer-body > .flash-message,
+.progression-card {
+  background: rgba(37, 99, 235, 0.06) !important;
+  border-color: rgba(37, 99, 235, 0.14);
+  box-shadow: none;
+}
+
+.flash-banner.guidance-banner,
+.progression-card {
+  border-radius: 16px;
+  padding: 14px 15px;
+}
+
+.guidance-banner p,
+.progression-card p,
+.drawer-body > .flash-message {
+  color: var(--text-secondary);
+}
+
+.guidance-actions {
+  gap: 8px;
+}
+
+.guard-row {
+  gap: 7px;
+  margin-top: 2px;
+}
+
+.detail-row,
+.agent-stats div {
+  padding-top: 10px;
+}
+
+.detail-row strong,
+.agent-stats strong {
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.empty-state {
+  padding: 22px 20px;
+  background: #0d1628 !important;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.empty-title {
+  margin-bottom: 6px;
+}
+
+.drawer-backdrop {
+  background: rgba(2, 6, 23, 0.46);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.drawer {
+  width: min(560px, 100vw);
+}
+
+.drawer-header {
+  padding: 20px 22px 18px;
+}
+
+.drawer-body {
+  padding: 18px 18px 24px;
+  gap: 12px;
+}
+
+.drawer-section {
+  padding: 15px 16px;
+}
+
+.drawer-section textarea {
+  min-height: 92px;
+}
+
+.form-actions {
+  gap: 8px;
+  padding-top: 6px;
+}
+
+@media (max-width: 1280px) {
+  .command-row,
+  .command-row.compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .command-row-meta,
+  .command-row-cta,
+  html[dir="rtl"] .command-row-meta,
+  html[dir="rtl"] .command-row-cta {
+    justify-content: flex-start;
+  }
+
+  .top-strip.metrics-strip,
+  .operational-grid,
+  .source-ops-grid,
+  .source-layout,
+  .source-workflow,
+  .rule-grid,
+  .playbook-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .content {
+    padding: 16px 12px 26px;
+  }
+
+  .topbar,
+  .filters {
+    margin-inline: 12px;
+  }
+
+  .topbar {
+    padding: 12px 14px;
+  }
+
+  #screen-actions {
+    justify-content: flex-start;
+  }
+
+  .kpi-cell {
+    min-height: 96px;
+  }
+
+  .intent-section,
+  .bottom-zone,
+  .command-zone,
+  .command-zone.light {
+    padding: 16px;
+  }
+
+  .drawer {
+    width: 100vw;
+  }
+}
