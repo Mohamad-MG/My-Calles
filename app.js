@@ -2090,17 +2090,17 @@ function renderAnalysisScreen() {
 
   return `
     <section class="command-deck">
-      <section class="top-strip metrics-strip">
+      <section class="top-strip metrics-strip metrics-grid-8">
         ${renderKpiCell(copy().meta.lang === "ar" ? "إشارات اليوم" : "Signals today", metrics.newToday, "primary")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "أول تواصل اليوم" : "First touches today", metrics.firstTouchesDoneToday)}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "بانتظار الرد" : "Waiting response", metrics.waitingResponseCount)}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "متابعة اليوم" : "Follow-up due today", metrics.followUpDueToday, metrics.followUpDueToday ? "alert" : "")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "متابعات متأخرة" : "Overdue follow-ups", metrics.overdueFollowups, metrics.overdueFollowups ? "alert" : "")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "تم الرد اليوم" : "Responded today", metrics.respondedToday)}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "بلا أول تواصل" : "Untouched captured", metrics.untouchedCapturedToday, metrics.untouchedCapturedToday ? "alert" : "")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "المتبقي للأهداف" : "Remaining to target", metrics.remainingToTarget, metrics.remainingToTarget ? "alert" : "")}
-        ${renderKpiCell(copy().meta.lang === "ar" ? "فرص مفتوحة" : "Open revenue", metrics.openOpportunities)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "أول تواصل" : "First touch", metrics.firstTouchesDoneToday)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "بانتظار الرد" : "Waiting", metrics.waitingResponseCount)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "متابعة اليوم" : "Follow-up", metrics.followUpDueToday, metrics.followUpDueToday ? "alert" : "")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "متأخر" : "Overdue", metrics.overdueFollowups, metrics.overdueFollowups ? "alert" : "")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "تم الرد" : "Responded", metrics.respondedToday)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "بلا تواصل" : "No touch", metrics.untouchedCapturedToday, metrics.untouchedCapturedToday ? "alert" : "")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "المتبقي" : "Remaining", metrics.remainingToTarget, "target")}
       </section>
+
 
       <section class="command-zone">
         <div class="command-zone-head">
