@@ -6099,9 +6099,27 @@ html[dir="rtl"] .drawer {
 }
 
 /* ── Lead Drawer Polish ── */
-.drawer {
-  width: min(760px, calc(100vw - 32px)) !important;
+.drawer-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  display: block !important;
 }
+
+.drawer {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  inset-inline-start: auto !important;
+  inset-inline-end: auto !important;
+  width: min(760px, calc(100vw - 32px)) !important;
+  max-width: calc(100vw - 32px) !important;
+  height: auto !important;
+  max-height: min(88vh, 960px) !important;
+  transform: translate(-50%, -50%) !important;
+  margin: 0 !important;
+  }
 
 .drawer-header {
   padding: 18px 20px 14px !important;
@@ -6130,6 +6148,11 @@ html[dir="rtl"] .drawer {
   padding: 16px 16px 22px !important;
   display: grid !important;
   gap: 12px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-gutter: stable !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(96, 165, 250, 0.55) rgba(15, 23, 42, 0.88);
 }
 
 .drawer-section {
@@ -6319,6 +6342,10 @@ html[dir="rtl"] .drawer-header {
   grid-template-columns: auto minmax(0, 1fr) !important;
 }
 
+html[dir="rtl"] .drawer {
+  transform: translate(-50%, -50%) !important;
+}
+
 html[dir="rtl"] .drawer-header > div:first-child {
   order: 2;
 }
@@ -6327,9 +6354,30 @@ html[dir="rtl"] #drawer-close {
   order: 1;
 }
 
+.drawer-body::-webkit-scrollbar {
+  width: 12px;
+}
+
+.drawer-body::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.88);
+  border-radius: 999px;
+  border: 2px solid rgba(8, 14, 25, 0.96);
+}
+
+.drawer-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.72), rgba(37, 99, 235, 0.62));
+  border-radius: 999px;
+  border: 2px solid rgba(15, 23, 42, 0.88);
+}
+
+.drawer-body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(125, 182, 255, 0.82), rgba(59, 130, 246, 0.76));
+}
+
 @media (max-width: 900px) {
   .drawer {
     width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
   }
 
   .drawer-header {
