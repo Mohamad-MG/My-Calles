@@ -5510,18 +5510,22 @@ body,
 }
 
 .kpi-cell {
-  min-height: 102px;
-  padding: 16px 18px;
-  justify-content: space-between;
+  min-height: 52px !important;
+  padding: 8px 10px !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  border-radius: 10px !important;
 }
 
 .kpi-cell span {
-  font-size: 0.66rem;
-  letter-spacing: 0.07em;
+  font-size: 0.55rem !important;
+  letter-spacing: 0.04em !important;
+  line-height: 1.1 !important;
 }
 
 .kpi-cell strong {
-  font-size: clamp(2.1rem, 4vw, 2.7rem);
+  font-size: clamp(1.2rem, 2vw, 1.6rem) !important;
+  line-height: 1 !important;
 }
 
 .kpi-cell.primary {
@@ -5968,7 +5972,13 @@ html[dir="rtl"] .drawer {
   }
 
   .kpi-cell {
-    min-height: 96px;
+    min-height: 48px !important;
+    padding: 6px 8px !important;
+    border-radius: 8px !important;
+  }
+  
+  .kpi-cell strong {
+    font-size: 1.3rem !important;
   }
 
   .intent-section,
