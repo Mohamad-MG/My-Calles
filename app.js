@@ -1446,47 +1446,160 @@ function renderMetricCard(label, value, note = "") {
   `;
 }
 
+function renderKpiCell(label, value, tone = "") {
+  return `
+    <article class="kpi-cell ${tone}">
+      <span>${label}</span>
+      <strong>${value}</strong>
+    </article>
+  `;
+}
+
+function getLeadCommandState(lead) {
+  const today = todayDate();
+  const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
+  const computedStage = getComputedLeadStage(lead, today);
+  const isOverdue = computedStage === "Delayed" || (lead.next_step_date && lead.next_step_date < today);
+  const isDueToday = lead.next_step_date && lead.next_step_date === today;
+
+  if (isOverdue || workflowBucket === "Ready for Handoff") {
+    return {
+      rowTone: "critical",
+      urgencyClass: isOverdue ? "danger" : "accent",
+      urgencyLabel: isOverdue
+        ? (copy().meta.lang === "ar" ? "متأخر" : "Overdue")
+        : (copy().meta.lang === "ar" ? "جاهز الآن" : "Ready now"),
+    };
+  }
+
+  if (workflowBucket === "Needs Reply" || isDueToday) {
+    return {
+      rowTone: "active",
+      urgencyClass: "warning",
+      urgencyLabel: isDueToday
+        ? (copy().meta.lang === "ar" ? "اليوم" : "Today")
+        : (copy().meta.lang === "ar" ? "يحتاج رد" : "Needs reply"),
+    };
+  }
+
+  return {
+    rowTone: "",
+    urgencyClass: "",
+    urgencyLabel: isDueToday
+      ? (copy().meta.lang === "ar" ? "اليوم" : "Today")
+      : shortDate(lead.next_step_date),
+  };
+}
+
+function renderLeadCommandRow(lead, options = {}) {
+  const sector = getSectorById(lead.sector_id);
+  const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
+  const computedStage = getComputedLeadStage(lead, todayDate());
+  const linkedOpportunity = getOpportunityByLeadId(lead.id);
+  const commandState = getLeadCommandState(lead);
+  const signal = compactText(
+    lead.pain_signal || lead.notes || getValueLabel("noSignalCaptured", "No signal captured yet."),
+    options.signalLimit || 92,
+  );
+  const nextAction = compactText(
+    lead.next_step || getValueLabel("noImmediateNextStep", "No immediate next step"),
+    options.stepLimit || 58,
+  );
+  const ctaHtml =
+    options.preferConvert &&
+    workflowBucket === "Ready for Handoff" &&
+    lead.current_stage === "Handoff Sent" &&
+    lead.handoff_summary &&
+    !linkedOpportunity
+      ? `<button class="primary-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button>`
+      : linkedOpportunity
+        ? `<button class="ghost-button tight" type="button" data-open-record="opportunity:${linkedOpportunity.id}">${guidanceLabel("openOpportunity")}</button>`
+        : `<button class="ghost-button tight" type="button" data-open-record="lead:${lead.id}">${copy().meta.lang === "ar" ? "راجع" : "Review"}</button>`;
+
+  return `
+    <article class="command-row ${options.compact ? "compact" : ""} ${commandState.rowTone}">
+      <button class="command-row-main" type="button" data-open-record="lead:${lead.id}">
+        <div class="command-company">
+          <strong dir="${inferTextDirection(lead.company_name)}">${lead.company_name}</strong>
+          <span class="mixed-meta" dir="auto">${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}</span>
+        </div>
+        <div class="command-signal" dir="${inferTextDirection(signal)}">${signal}</div>
+        <div class="command-next" dir="${inferTextDirection(nextAction)}">${nextAction}</div>
+      </button>
+      <div class="command-row-meta">
+        <span class="source-badge">${displayChannel(lead.channel)}</span>
+        <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${displayWorkflowBucket(workflowBucket)}</span>
+        <span class="badge">${sector?.sector_name || displayStage(computedStage)}</span>
+        <span class="badge ${commandState.urgencyClass} command-urgency">${commandState.urgencyLabel}</span>
+      </div>
+      <div class="command-row-cta">${ctaHtml}</div>
+    </article>
+  `;
+}
+
 function renderAnalysisScreen() {
   const metrics = getAnalysisMetrics();
   const sourceRows = getSourcePriorityRows();
-  const actionQueue = getTodayActionQueue();
+  const actionQueue = getTodayActionQueue(5);
   const dropoffRows = getDropoffRows();
 
   setScreenActions("");
 
   return `
-    <section class="analysis-board">
-      <section class="stat-strip source-stat-strip">
-        ${renderMetricCard(copy().meta.lang === "ar" ? "جهات جديدة اليوم" : "New leads today", metrics.newToday)}
-        ${renderMetricCard(copy().meta.lang === "ar" ? "تحتاج تواصل الآن" : "Need contact now", metrics.needsContact)}
-        ${renderMetricCard(copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for handoff", metrics.readyForHandoff)}
-        ${renderMetricCard(copy().meta.lang === "ar" ? "فرص مفتوحة" : "Open opportunities", metrics.openOpportunities)}
+    <section class="command-deck">
+      <section class="top-strip metrics-strip">
+        ${renderKpiCell(copy().meta.lang === "ar" ? "إشارات اليوم" : "Signals today", metrics.newToday, "primary")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "تحتاج حركة" : "Need movement", metrics.needsContact, "alert")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready to convert", metrics.readyForHandoff)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "فرص مفتوحة" : "Open revenue", metrics.openOpportunities)}
       </section>
 
-      <section class="analysis-grid">
-        <article class="panel analysis-panel">
-          <div class="panel-head">
+      <section class="command-zone">
+        <div class="command-zone-head">
+          <div>
+            <p class="panel-label">${copy().meta.lang === "ar" ? "مركز القرار" : "Command Zone"}</p>
+            <h2>${copy().meta.lang === "ar" ? "حركة الإيراد التالية" : "Next Revenue Moves"}</h2>
+            <p class="zone-copy">${
+              copy().meta.lang === "ar"
+                ? "صفوف تنفيذ مباشرة: الشركة، الإشارة، الخطوة التالية، ثم تنفيذ فوري."
+                : "Direct execution rows: company, signal, next move, then immediate action."
+            }</p>
+          </div>
+          <div class="command-zone-stats">
+            <div><span>${copy().meta.lang === "ar" ? "القنوات النشطة" : "Active sources"}</span><strong>${sourceRows.length}</strong></div>
+            <div><span>${copy().meta.lang === "ar" ? "صف اليوم" : "Queue size"}</span><strong>${actionQueue.length}</strong></div>
+          </div>
+        </div>
+        <div class="command-zone-list">
+          ${actionQueue.length ? actionQueue.map(({ lead }) => renderLeadCommandRow(lead, { preferConvert: true })).join("") : renderEmptyState()}
+        </div>
+      </section>
+
+      <section class="operational-grid">
+        <article class="intent-section">
+          <div class="intent-head">
             <div>
-              <p class="panel-label">${copy().meta.lang === "ar" ? "أين نبدأ" : "Where to Hunt Today"}</p>
-              <h3>${copy().meta.lang === "ar" ? "أولوية القنوات اليوم" : "Source priority today"}</h3>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "اتجاه الصيد" : "Directional Focus"}</p>
+              <h3>${copy().meta.lang === "ar" ? "أولوية القنوات" : "Source Priority"}</h3>
             </div>
           </div>
-          <div class="rail-list">
+          <div class="intent-list">
             ${sourceRows
               .map(
                 ({ source, metrics: sourceMetrics }) => `
-                  <button class="rail-item source-priority-row" type="button" data-source-tab="${source}">
-                    <div>
+                  <button class="system-row" type="button" data-source-tab="${source}">
+                    <div class="system-row-main">
                       <strong>${displayChannel(source)}</strong>
-                      <div class="meta-row">
-                        ${
-                          copy().meta.lang === "ar"
-                            ? `${sourceMetrics.leads} جهة • ${sourceMetrics.needsReply} تحتاج رد • ${sourceMetrics.opportunities} فرصة`
-                            : `${sourceMetrics.leads} leads • ${sourceMetrics.needsReply} need reply • ${sourceMetrics.opportunities} opportunities`
-                        }
-                      </div>
+                      <div class="meta-row">${
+                        copy().meta.lang === "ar"
+                          ? `${sourceMetrics.leads} جهة • ${sourceMetrics.needsReply} تحتاج رد • ${sourceMetrics.opportunities} فرصة`
+                          : `${sourceMetrics.leads} leads • ${sourceMetrics.needsReply} need reply • ${sourceMetrics.opportunities} opportunities`
+                      }</div>
                     </div>
-                    <span class="pill">${copy().meta.lang === "ar" ? `${sourceMetrics.readyForHandoff} جاهزة` : `${sourceMetrics.readyForHandoff} ready`}</span>
+                    <div class="system-row-side">
+                      <span class="system-number">${sourceMetrics.readyForHandoff}</span>
+                      <span class="system-label">${copy().meta.lang === "ar" ? "جاهزة" : "ready"}</span>
+                    </div>
                   </button>
                 `,
               )
@@ -1494,50 +1607,21 @@ function renderAnalysisScreen() {
           </div>
         </article>
 
-        <article class="panel analysis-panel">
-          <div class="panel-head">
+        <article class="intent-section faded">
+          <div class="intent-head">
             <div>
-              <p class="panel-label">${copy().meta.lang === "ar" ? "حركة اليوم" : "Today Action Queue"}</p>
-              <h3>${copy().meta.lang === "ar" ? "ما الذي يحتاج حركة الآن" : "What should move now"}</h3>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "أماكن التباطؤ" : "Attention Surface"}</p>
+              <h3>${copy().meta.lang === "ar" ? "مواضع التوقف" : "Where Momentum Slips"}</h3>
             </div>
           </div>
-          <div class="rail-list">
-            ${
-              actionQueue.length
-                ? actionQueue
-                    .map(
-                      ({ lead, workflowBucket, computedStage }) => `
-                        <button class="rail-item analysis-action-row" type="button" data-open-record="lead:${lead.id}">
-                          <div>
-                            <strong>${lead.company_name}</strong>
-                            <div class="meta-row">${displayChannel(lead.channel)} • ${displayWorkflowBucket(workflowBucket)} • ${displayStage(computedStage)}</div>
-                            <div class="meta-row">${compactText(lead.next_step || getValueLabel("noImmediateNextStep", "No immediate next step"), 80)}</div>
-                          </div>
-                          <span class="pill">${shortDate(lead.next_step_date)}</span>
-                        </button>
-                      `,
-                    )
-                    .join("")
-                : renderEmptyState()
-            }
-          </div>
-        </article>
-
-        <article class="panel analysis-panel">
-          <div class="panel-head">
-            <div>
-              <p class="panel-label">${copy().meta.lang === "ar" ? "نقاط الانتباه" : "Drop-Off / Attention"}</p>
-              <h3>${copy().meta.lang === "ar" ? "أماكن التوقف الظاهرة" : "Where progress is stalling"}</h3>
-            </div>
-          </div>
-          <div class="rail-list">
+          <div class="intent-list">
             ${
               dropoffRows.length
                 ? dropoffRows
                     .map(
                       (row) => `
-                        <button class="rail-item source-priority-row" type="button" data-source-tab="${row.source}">
-                          <div>
+                        <button class="system-row warning" type="button" data-source-tab="${row.source}">
+                          <div class="system-row-main">
                             <strong>${displayChannel(row.source)}</strong>
                             <div class="meta-row">
                               ${
@@ -1547,7 +1631,10 @@ function renderAnalysisScreen() {
                               }
                             </div>
                           </div>
-                          <span class="pill">${copy().meta.lang === "ar" ? `${row.readyForHandoff} جاهزة` : `${row.readyForHandoff} ready`}</span>
+                          <div class="system-row-side">
+                            <span class="system-number">${row.readyForHandoff}</span>
+                            <span class="system-label">${copy().meta.lang === "ar" ? "جاهزة" : "ready"}</span>
+                          </div>
                         </button>
                       `,
                     )
@@ -1556,80 +1643,95 @@ function renderAnalysisScreen() {
             }
           </div>
         </article>
+
+        <article class="bottom-zone">
+          <div class="intent-head">
+            <div>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "نظام التشغيل" : "Operating Cadence"}</p>
+              <h3>${copy().meta.lang === "ar" ? "قواعد قرار سريعة" : "Fast Decision Rules"}</h3>
+            </div>
+          </div>
+          <div class="rule-grid">
+            <div class="rule-tile">
+              <span>${copy().meta.lang === "ar" ? "الحركة الأولى" : "First move"}</span>
+              <strong>${copy().meta.lang === "ar" ? "ابدأ بالقنوات ذات الجاهزية الأعلى، لا بالأكثر ضجيجًا." : "Start with the most conversion-ready source, not the noisiest one."}</strong>
+            </div>
+            <div class="rule-tile">
+              <span>${copy().meta.lang === "ar" ? "معيار التنفيذ" : "Execution test"}</span>
+              <strong>${copy().meta.lang === "ar" ? "إذا لم توجد خطوة تالية، فالسجل متوقف حتى لو بدا نشطًا." : "If there is no next step, the record is stalled even if it looks active."}</strong>
+            </div>
+            <div class="rule-tile">
+              <span>${copy().meta.lang === "ar" ? "نقطة التحويل" : "Conversion gate"}</span>
+              <strong>${copy().meta.lang === "ar" ? "حافظ على handoff واضحًا ثم حوّل مباشرة دون ترك الصف يبرد." : "Keep the handoff crisp, then convert immediately before the queue cools down."}</strong>
+            </div>
+          </div>
+        </article>
       </section>
     </section>
   `;
 }
 
 function renderAllLeadCard(lead) {
-  const sector = getSectorById(lead.sector_id);
-  const computedStage = getComputedLeadStage(lead, todayDate());
-  const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
-  const linkedOpportunity = getOpportunityByLeadId(lead.id);
-  const canConvert =
-    workflowBucket === "Ready for Handoff" &&
-    lead.current_stage === "Handoff Sent" &&
-    lead.handoff_summary &&
-    !linkedOpportunity;
-
-  return `
-    <article class="source-card dense-card">
-      <button class="source-card-main" type="button" data-open-record="lead:${lead.id}">
-        <div class="kanban-top">
-          <div>
-            <strong dir="${inferTextDirection(lead.company_name)}">${lead.company_name}</strong>
-            <span class="mixed-meta" dir="auto">${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}</span>
-          </div>
-          <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${displayStage(computedStage)}</span>
-        </div>
-        <div class="meta-list">
-          <span><span class="source-badge">${displayChannel(lead.channel)}</span> • ${sector?.sector_name || "—"}</span>
-          <span>${displayWorkflowBucket(workflowBucket)}</span>
-          <span dir="${inferTextDirection(lead.pain_signal || lead.notes)}">${compactText(lead.pain_signal || lead.notes || getValueLabel("noSignalCaptured", "No signal captured yet."), 84)}</span>
-        </div>
-        <div class="card-footer">
-          <small class="card-next" dir="${inferTextDirection(lead.next_step)}">${compactText(lead.next_step || "—", 56)}</small>
-          <small dir="ltr">${shortDate(lead.next_step_date)}</small>
-        </div>
-      </button>
-      <div class="source-card-actions">
-        <button class="ghost-button tight" type="button" data-open-record="lead:${lead.id}">${copy().meta.lang === "ar" ? "فتح السجل" : "Open lead"}</button>
-        ${
-          canConvert
-            ? `<button class="success-button tight" type="button" data-convert-lead="${lead.id}">${copy().chrome.buttons.createOpportunityFromLead}</button>`
-            : linkedOpportunity
-              ? `<button class="ghost-button tight" type="button" data-open-record="opportunity:${linkedOpportunity.id}">${guidanceLabel("openOpportunity")}</button>`
-              : ""
-        }
-      </div>
-    </article>
-  `;
+  return renderLeadCommandRow(lead, {
+    preferConvert: true,
+    compact: true,
+    signalLimit: 110,
+    stepLimit: 70,
+  });
 }
 
 function renderAllLeadsScreen() {
   const leads = getAllLeads();
+  const needsReplyCount = leads.filter(
+    (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Needs Reply",
+  ).length;
+  const readyCount = leads.filter(
+    (lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Ready for Handoff",
+  ).length;
+  const progressedCount = leads.filter((lead) => getOpportunityByLeadId(lead.id)).length;
 
-  setScreenActions("");
+  setScreenActions(`<button class="primary-button" type="button" data-action="new-lead">${copy().chrome.buttons.newLead}</button>`);
 
   return `
-    <section class="analysis-board">
-      <section class="stat-strip source-stat-strip">
-        ${renderMetricCard(copy().meta.lang === "ar" ? "كل اللِيدز" : "All leads", leads.length)}
-        ${renderMetricCard(copy().meta.lang === "ar" ? "تحتاج رد" : "Needs reply", leads.filter((lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Needs Reply").length)}
-        ${renderMetricCard(copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for handoff", leads.filter((lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === "Ready for Handoff").length)}
-        ${renderMetricCard(copy().meta.lang === "ar" ? "مرتبطة بفرص" : "Already progressed", leads.filter((lead) => getOpportunityByLeadId(lead.id)).length)}
+    <section class="command-deck">
+      <section class="top-strip metrics-strip">
+        ${renderKpiCell(copy().meta.lang === "ar" ? "كل اللِيدز" : "All leads", leads.length, "primary")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "تحتاج رد" : "Need reply", needsReplyCount, "alert")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready to convert", readyCount)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "مرتبطة بفرص" : "Progressed", progressedCount)}
       </section>
-      <section class="panel all-leads-panel">
-        <div class="panel-head">
+
+      <section class="command-zone light">
+        <div class="command-zone-head">
           <div>
             <p class="panel-label">${copy().meta.lang === "ar" ? "الصندوق الرئيسي" : "Master Inbox"}</p>
-            <h3>${copy().meta.lang === "ar" ? "كل العملاء المحتملين" : "All Leads"}</h3>
+            <h2>${copy().meta.lang === "ar" ? "كل اللِيدز في صف تنفيذ واحد" : "All Leads in One Execution Queue"}</h2>
+            <p class="zone-copy">${
+              copy().meta.lang === "ar"
+                ? "نفس منطق القرار: من الشركة إلى الإشارة إلى الخطوة القادمة، بدون تشتت بصري."
+                : "Same decision logic: company to signal to next move, without visual fragmentation."
+            }</p>
           </div>
-          <button class="primary-button tight" type="button" data-action="new-lead">${copy().chrome.buttons.newLead}</button>
         </div>
-        <div class="all-leads-grid">
+        <div class="command-zone-list light-list">
           ${leads.length ? leads.map(renderAllLeadCard).join("") : renderEmptyState()}
         </div>
+      </section>
+
+      <section class="operational-grid single-column">
+        <article class="bottom-zone">
+          <div class="intent-head">
+            <div>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "قراءة سريعة" : "Quick Read"}</p>
+              <h3>${copy().meta.lang === "ar" ? "كيف تقرأ هذا الصف" : "How to Scan This Queue"}</h3>
+            </div>
+          </div>
+          <div class="rule-grid">
+            <div class="rule-tile"><span>${copy().meta.lang === "ar" ? "يسار الصف" : "Left"}</span><strong>${copy().meta.lang === "ar" ? "من نتعامل معه الآن." : "Who we are dealing with right now."}</strong></div>
+            <div class="rule-tile"><span>${copy().meta.lang === "ar" ? "الوسط" : "Middle"}</span><strong>${copy().meta.lang === "ar" ? "لماذا هذه الجهة مهمة وماذا حدث فيها." : "Why the lead matters and what signal exists."}</strong></div>
+            <div class="rule-tile"><span>${copy().meta.lang === "ar" ? "اليمين" : "Right"}</span><strong>${copy().meta.lang === "ar" ? "الإجراء التالي أو التحويل الفوري." : "The next action or instant conversion."}</strong></div>
+          </div>
+        </article>
       </section>
     </section>
   `;
@@ -1641,17 +1743,78 @@ function renderSourceScreen(source) {
   }
 
   state.activeSource = source;
+  const metrics = getSourceMetrics(source);
+  const sourceLeads = getSourceLeads(source);
+  const commandLeads = sourceLeads
+    .filter((lead) => {
+      const bucket = getLeadWorkflowBucket(lead, state.data.opportunities);
+      return ["Ready for Handoff", "Needs Reply", "Needs Qualification"].includes(bucket);
+    })
+    .slice(0, 5);
+
+  setScreenActions(`<button class="primary-button" type="button" data-action="new-lead">${copy().chrome.buttons.newLead}</button>`);
+
   return `
-    <section class="source-board">
-      <section class="source-intro-grid">
-        ${renderSourceHuntPanel(source)}
-        ${renderSourceSnapshot(source)}
+    <section class="command-deck source-deck">
+      <section class="top-strip metrics-strip">
+        ${renderKpiCell(copy().meta.lang === "ar" ? "إجمالي اللِيدز" : "Captured", metrics.leads, "primary")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "تحتاج رد" : "Need reply", metrics.needsReply, "alert")}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready", metrics.readyForHandoff)}
+        ${renderKpiCell(copy().meta.lang === "ar" ? "فرص ناتجة" : "Opportunities", metrics.opportunities)}
       </section>
-      <section class="source-layout">
-        <div class="source-main">
-          ${renderSourceWorkflow(source)}
+
+      <section class="command-zone">
+        <div class="command-zone-head">
+          <div>
+            <p class="panel-label">${copy().meta.lang === "ar" ? "غرفة القيادة" : "Source Command"}</p>
+            <h2>${copy().meta.lang === "ar" ? `تشغيل ${displayChannel(source)}` : `${displayChannel(source)} Control Room`}</h2>
+            <p class="zone-copy">${
+              copy().meta.lang === "ar"
+                ? "أفضل الخطوات التالية داخل هذه القناة فقط، مع نفس منطق: إشارة ثم قرار ثم تنفيذ."
+                : "Best next moves inside this source only, using the same signal-to-decision flow."
+            }</p>
+          </div>
         </div>
-        ${renderSourceProgression(source)}
+        <div class="command-zone-list">
+          ${commandLeads.length ? commandLeads.map((lead) => renderLeadCommandRow(lead, { preferConvert: true })).join("") : renderEmptyState()}
+        </div>
+      </section>
+
+      <section class="operational-grid source-ops-grid">
+        <article class="intent-section elevated">
+          <div class="intent-head">
+            <div>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "طريقة الصيد" : "Hunt Protocol"}</p>
+              <h3>${copy().meta.lang === "ar" ? "دليل التنفيذ داخل القناة" : "How to Work This Source"}</h3>
+            </div>
+          </div>
+          ${renderSourceHuntPanel(source)}
+        </article>
+
+        <article class="intent-section">
+          <div class="intent-head">
+            <div>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "حالة القناة" : "Source Snapshot"}</p>
+              <h3>${copy().meta.lang === "ar" ? "قراءة تشغيلية" : "Operational Read"}</h3>
+            </div>
+          </div>
+          ${renderSourceSnapshot(source)}
+        </article>
+
+        <article class="bottom-zone full-span">
+          <div class="intent-head">
+            <div>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "التدفق التنفيذي" : "Execution Flow"}</p>
+              <h3>${copy().meta.lang === "ar" ? "الصندوق والتقدم" : "Inbox and Progression"}</h3>
+            </div>
+          </div>
+          <section class="source-layout">
+            <div class="source-main">
+              ${renderSourceWorkflow(source)}
+            </div>
+            ${renderSourceProgression(source)}
+          </section>
+        </article>
       </section>
     </section>
   `;
