@@ -1517,7 +1517,7 @@ function renderLeadCommandRow(lead, options = {}) {
         : `<button class="ghost-button tight" type="button" data-open-record="lead:${lead.id}">${copy().meta.lang === "ar" ? "راجع" : "Review"}</button>`;
 
   return `
-    <article class="command-row ${options.compact ? "compact" : ""} ${commandState.rowTone}">
+    <article class="command-row ${options.compact ? "compact" : ""} ${commandState.rowTone} urgency-${commandState.urgencyClass || "none"}">
       <button class="command-row-main" type="button" data-open-record="lead:${lead.id}">
         <div class="command-company">
           <strong dir="${inferTextDirection(lead.company_name)}">${lead.company_name}</strong>
