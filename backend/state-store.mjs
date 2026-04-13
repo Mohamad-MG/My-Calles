@@ -2,6 +2,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  buildDashboardAnalytics,
   createSeedData,
   enforceSingleActiveSector,
   getRequiredValidationErrors,
@@ -223,8 +224,10 @@ class StateStore {
     this.dataDir = dataDir;
     this.stateFile = path.join(dataDir, "dashboard-state.json");
     this.auditFile = path.join(dataDir, "audit-log.jsonl");
+    this.analyticsFile = path.join(dataDir, "analytics-rollups.json");
     this.eventsFile = path.join(dataDir, "observability-log.jsonl");
     this.state = null;
+    this.analytics = null;
     this.metrics = {
       requests: 0,
       failures: 0,
@@ -241,6 +244,7 @@ class StateStore {
   async init() {
     await mkdir(this.dataDir, { recursive: true });
     this.state = await this.#loadState();
+    await this.#refreshAnalytics();
     return this;
   }
 
@@ -248,7 +252,10 @@ class StateStore {
     if (!this.state) {
       await this.init();
     }
-    return clone(this.state);
+    return {
+      ...clone(this.state),
+      analytics: clone(this.analytics || buildDashboardAnalytics(this.state)),
+    };
   }
 
   getVersion() {
@@ -339,7 +346,7 @@ class StateStore {
       actor,
       timestamp,
     });
-    return clone(nextState);
+    return await this.getState();
   }
 
   async createEntity(entity, values, actor = "system") {
@@ -373,7 +380,7 @@ class StateStore {
         timestamp,
       });
       return {
-        state: clone(committedState),
+        state: await this.getState(),
         record: clone(draft),
         created: true,
         duplicate: false,
@@ -414,7 +421,7 @@ class StateStore {
         timestamp,
       });
       return {
-        state: clone(committedState),
+        state: await this.getState(),
         record: clone(draft),
         created: true,
         duplicate: false,
@@ -445,7 +452,7 @@ class StateStore {
         timestamp,
       });
       return {
-        state: clone(committedState),
+        state: await this.getState(),
         record: clone(draft),
         created: true,
         duplicate: false,
@@ -469,7 +476,7 @@ class StateStore {
       actor,
       timestamp,
     });
-    return clone(nextState);
+    return await this.getState();
   }
 
   async #loadState() {
@@ -481,6 +488,32 @@ class StateStore {
       await writeFile(this.stateFile, JSON.stringify(initialState, null, 2));
       return initialState;
     }
+  }
+
+  async #readAuditRecords() {
+    try {
+      const serialized = await readFile(this.auditFile, "utf8");
+      const records = serialized
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+
+      const lastResetIndex = records.reduce((index, entry, currentIndex) => {
+        return ["restore-seed", "reset-shared"].includes(entry.action) ? currentIndex : index;
+      }, -1);
+
+      return lastResetIndex >= 0 ? records.slice(lastResetIndex + 1) : records;
+    } catch {
+      return [];
+    }
+  }
+
+  async #refreshAnalytics() {
+    const auditRecords = await this.#readAuditRecords();
+    const analytics = buildDashboardAnalytics(this.state, auditRecords);
+    this.analytics = analytics;
+    await writeFile(this.analyticsFile, JSON.stringify(analytics, null, 2));
   }
 
   async #commit({ action, entity, id, before, after, state, actor, timestamp }) {
@@ -509,6 +542,12 @@ class StateStore {
       this.state = previousState;
       await writeFile(this.stateFile, JSON.stringify(previousState, null, 2));
       throw error;
+    }
+    try {
+      await this.#refreshAnalytics();
+    } catch (error) {
+      this.analytics = this.analytics || buildDashboardAnalytics(this.state);
+      console.error(`[analytics-refresh] ${error.message}`);
     }
   }
 }

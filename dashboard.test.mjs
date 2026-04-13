@@ -6,8 +6,11 @@ import {
   enforceSingleActiveSector,
   getComputedLeadStage,
   getLeadGuardFlags,
+  getLeadNextBestAction,
+  getLeadSlaState,
   getOpportunityGuardFlags,
   getComputedOpportunityStage,
+  buildDashboardAnalytics,
   hydrateDashboardState,
   getMetrics,
   normalizeDashboardState,
@@ -190,6 +193,33 @@ test("lead guard flags expose missing handoff and overdue states", () => {
   assert.ok(flags.some((flag) => flag.label === "Handoff missing"));
 });
 
+test("next-best action prefers opener for captured leads without first touch", () => {
+  const recommendation = getLeadNextBestAction(
+    {
+      id: "lead-opener",
+      company_name: "New Clinic",
+      current_stage: "New",
+      created_at: "2026-04-13",
+      first_touch_at: "",
+      next_step_date: "2026-04-15",
+      next_step: "Send opener",
+      pain_signal: "Missed evening calls",
+      handoff_summary: "",
+    },
+    [],
+  );
+
+  assert.equal(recommendation.action, "opener");
+});
+
+test("lead SLA marks overdue follow-up when next step date is in the past", () => {
+  const seed = createSeedData();
+  const lead = seed.leads.find((item) => item.id === "lead-3");
+  const sla = getLeadSlaState(lead);
+
+  assert.equal(sla.state, "overdue");
+});
+
 test("opportunity guard flags expose readiness gaps", () => {
   const flags = getOpportunityGuardFlags({
     current_stage: "Qualified Interest",
@@ -201,6 +231,15 @@ test("opportunity guard flags expose readiness gaps", () => {
   });
 
   assert.ok(flags.some((flag) => flag.label === "Readiness missing"));
+});
+
+test("analytics builder creates a time series for each source", () => {
+  const seed = createSeedData();
+  const analytics = buildDashboardAnalytics(seed);
+
+  assert.ok(analytics.sources.WhatsApp);
+  assert.equal(analytics.sources.WhatsApp.trend.daily.length, 14);
+  assert.ok(analytics.sources.WhatsApp.roi.leads >= 1);
 });
 
 test("hydrate dashboard state recovers from invalid persisted data", () => {

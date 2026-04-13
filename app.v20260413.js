@@ -14,10 +14,16 @@ import {
   getOpportunityReadinessGaps,
   getComputedOpportunityStage,
   getComputedSectorStatus,
+  buildDashboardAnalytics,
   getRequiredValidationErrors,
   hasOpportunityForLead,
   normalizeDashboardState,
   todayDate,
+  getLeadNextBestAction,
+  getLeadSlaState,
+  getOpportunityNextBestAction,
+  getOpportunitySlaState,
+  getSectorSlaState,
   validateLeadTransition,
   validateOpportunityTransition,
 } from "./logic.mjs";
@@ -157,12 +163,14 @@ const state = {
   },
   notice: "",
   guidance: null,
+  analytics: null,
   storage: {
     available: true,
     source: "local",
     lastSavedAt: null,
     snapshot: "",
     version: 0,
+    sessionId: crypto.randomUUID ? crypto.randomUUID() : `session-${Math.random().toString(16).slice(2)}`,
   },
   recentCaptureLeadId: "",
 };
@@ -428,7 +436,7 @@ function getSeedData() {
 
 function saveToLocalStorage() {
   try {
-    localStorage.setItem(STORAGE_KEY, serializeDashboardState(state.data));
+    localStorage.setItem(STORAGE_KEY, serializeDashboardState(state.data, state.analytics));
     state.storage.lastSavedAt = new Intl.DateTimeFormat("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
@@ -446,12 +454,13 @@ function loadFromLocalStorage() {
     const serialized = localStorage.getItem(STORAGE_KEY);
     return parseDashboardState(serialized);
   } catch {
-    return createSeedData();
+    return normalizeDashboardState(createSeedData());
   }
 }
 
 function applyStateSnapshot(nextData, { message = "", source = "local" } = {}) {
   state.data = normalizeDashboardState(nextData);
+  state.analytics = nextData?.analytics || buildDashboardAnalytics(state.data);
   state.storage.snapshot = JSON.stringify(state.data);
   state.storage.source = source;
   if (source !== "memory-only") {
@@ -466,12 +475,81 @@ function applyStateSnapshot(nextData, { message = "", source = "local" } = {}) {
   }
 }
 
-async function loadInitialDashboardState() {
-  const data = loadFromLocalStorage();
-  applyStateSnapshot(data, { source: "local" });
+async function fetchRemoteDashboardState() {
+  try {
+    const response = await fetch("/state", {
+      headers: {
+        "X-User": "dashboard-web",
+        "X-Session-Id": state.storage.sessionId,
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    const version = Number(response.headers.get("X-State-Version") || 0);
+    return {
+      payload,
+      version: Number.isFinite(version) ? version : 0,
+    };
+  } catch {
+    return null;
+  }
 }
 
-async function mutateState(path, { body, message = "" } = {}) {
+async function sendRemoteMutation(path, method, body) {
+  try {
+    const response = await fetch(path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "X-User": "dashboard-web",
+        "X-Session-Id": state.storage.sessionId,
+        "X-Known-State-Version": String(state.storage.version || 0),
+      },
+      body: method === "GET" ? undefined : JSON.stringify(body || {}),
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Remote mutation failed.");
+    }
+
+    return {
+      payload,
+      version: Number(response.headers.get("X-State-Version") || state.storage.version || 0),
+      conflict: response.headers.get("X-Conflict-Detected") === "1",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function loadInitialDashboardState() {
+  const remote = await fetchRemoteDashboardState();
+  if (remote?.payload) {
+    applyStateSnapshot(remote.payload, { source: "remote" });
+    state.storage.version = remote.version || state.storage.version;
+    saveToLocalStorage();
+    return;
+  }
+
+  const data = loadFromLocalStorage();
+  applyStateSnapshot(data, { source: "local" });
+  state.storage.version = Number(data?._meta?.version || 0);
+}
+
+async function mutateState(path, { method = "PATCH", body, message = "" } = {}) {
+  const remote = await sendRemoteMutation(path, method, body);
+  if (remote?.payload) {
+    applyStateSnapshot(remote.payload, { source: "remote", message });
+    state.storage.version = remote.version || state.storage.version;
+    saveToLocalStorage();
+    return remote.payload;
+  }
+
   // Apply the mutation to in-memory state (body is the patch/entity)
   // path pattern: /sectors/:id, /leads/:id, /opportunities/:id, /sectors, etc.
   const segments = path.replace(/^\//, "").split("/");
@@ -500,6 +578,7 @@ async function mutateState(path, { body, message = "" } = {}) {
   }
 
   state.data = normalizeDashboardState(state.data);
+  state.analytics = buildDashboardAnalytics(state.data);
   saveToLocalStorage();
   if (message) setNotice(message);
   return state.data;
@@ -1102,6 +1181,333 @@ function getAnalysisSourceMetrics(source) {
     ).length,
     opportunities: opportunities.length,
   };
+}
+
+function getSourceAnalytics(source) {
+  return state.analytics?.sources?.[source] || buildDashboardAnalytics(state.data)?.sources?.[source] || null;
+}
+
+function formatPercent(value) {
+  return `${Math.round((Number(value) || 0) * 100)}%`;
+}
+
+function getLocalizedActionLabel(action) {
+  const isArabic = copy().meta.lang === "ar";
+  const labels = {
+    opener: isArabic ? "افتتاحية" : "Opener",
+    "follow-up": isArabic ? "متابعة" : "Follow-up",
+    handoff: isArabic ? "تحويل" : "Handoff",
+    disqualify: isArabic ? "استبعاد" : "Disqualify",
+  };
+
+  return labels[action] || action;
+}
+
+function getLocalizedActionReason(action, fallbackReason) {
+  if (copy().meta.lang !== "ar") {
+    return fallbackReason;
+  }
+
+  const labels = {
+    opener: "ما زال يحتاج أول تواصل",
+    "follow-up": "الخطوة التالية هي متابعة واضحة",
+    handoff: "جاهز للتحويل إلى فرصة",
+    disqualify: "لا يوجد مؤشر شراء واضح الآن",
+  };
+
+  return labels[action] || fallbackReason;
+}
+
+function getLocalizedSlaLabel(stateValue, fallbackLabel) {
+  if (copy().meta.lang !== "ar") {
+    return fallbackLabel;
+  }
+
+  const labels = {
+    overdue: "متأخر",
+    due_today: "اليوم",
+    stale: "قديم",
+    active: "على المسار",
+  };
+
+  return labels[stateValue] || fallbackLabel;
+}
+
+function getSourceTrendSeries(source, period = "daily") {
+  return getSourceAnalytics(source)?.trend?.[period] || [];
+}
+
+function getSourceRoiMetrics(source) {
+  return getSourceAnalytics(source)?.roi || null;
+}
+
+function getSourceFunnelMetrics(source) {
+  return getSourceAnalytics(source)?.funnel || null;
+}
+
+function getSourceSlaRows(source) {
+  const leads = state.data.leads.filter(
+    (lead) => lead.channel === source && matchesArchivedVisibility(lead),
+  );
+  return SOURCE_WORKFLOW_BUCKETS.map((bucket) => {
+    const bucketLeads = leads.filter((lead) => getLeadWorkflowBucket(lead, state.data.opportunities) === bucket);
+    const summary = bucketLeads.reduce(
+      (accumulator, lead) => {
+        const sla = getLeadSlaState(lead, todayDate());
+        accumulator.total += 1;
+        accumulator[sla.state] += 1;
+        return accumulator;
+      },
+      { total: 0, overdue: 0, due_today: 0, stale: 0, active: 0 },
+    );
+
+    return {
+      bucket,
+      total: summary.total,
+      overdue: summary.overdue,
+      due_today: summary.due_today,
+      stale: summary.stale,
+      active: summary.active,
+    };
+  });
+}
+
+function getSourceNextBestActions(source, limit = 4) {
+  const leadActions = state.data.leads
+    .filter((lead) => lead.channel === source && matchesArchivedVisibility(lead))
+    .map((lead) => {
+      const recommendation = getLeadNextBestAction(lead, state.data.opportunities, todayDate());
+      return {
+        kind: "lead",
+        record: lead,
+        recommendation,
+      };
+    });
+
+  const opportunityActions = state.data.opportunities
+    .map((opportunity) => {
+      const originLead = getLeadById(opportunity.origin_lead_id);
+      if (!originLead || originLead.channel !== source || !matchesArchivedVisibility(originLead)) {
+        return null;
+      }
+      const recommendation = getOpportunityNextBestAction(opportunity, todayDate());
+      return {
+        kind: "opportunity",
+        record: opportunity,
+        recommendation,
+      };
+    })
+    .filter(Boolean);
+
+  return [...leadActions, ...opportunityActions]
+    .sort((left, right) => right.recommendation.score - left.recommendation.score)
+    .slice(0, limit);
+}
+
+function renderTrendRow(series, metricKey, label, tone = "", period = "daily") {
+  const maxValue = Math.max(1, ...series.map((point) => Number(point?.[metricKey] || 0)));
+  return `
+    <div class="trend-row">
+      <div class="trend-row-head">
+        <span>${label}</span>
+        <strong>${series.reduce((total, point) => total + Number(point?.[metricKey] || 0), 0)}</strong>
+      </div>
+      <div class="trend-row-bars ${period}">
+        ${series
+          .map((point) => {
+            const value = Number(point?.[metricKey] || 0);
+            const height = Math.max(8, Math.round((value / maxValue) * 100));
+            const xLabel = period === "weekly" ? point.week : shortDate(point.date);
+            return `
+              <div class="trend-column" title="${xLabel}: ${value}">
+                <span class="trend-column-value">${value}</span>
+                <div class="trend-column-bar ${tone}" style="height: ${height}%"></div>
+                <small>${xLabel}</small>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderTrendPanel(source, { compact = false } = {}) {
+  const analytics = getSourceAnalytics(source);
+  const daily = analytics?.trend?.daily || [];
+  const weekly = analytics?.trend?.weekly || [];
+  const dailyMetrics = compact
+    ? [
+        ["captured", copy().meta.lang === "ar" ? "التقاط" : "Captured", "captured"],
+        ["replied", copy().meta.lang === "ar" ? "رد" : "Replies", "reply"],
+        ["opportunities", copy().meta.lang === "ar" ? "فرص" : "Opportunities", "opportunity"],
+        ["wins", copy().meta.lang === "ar" ? "فوز" : "Wins", "win"],
+      ]
+    : [
+        ["captured", copy().meta.lang === "ar" ? "التقاط" : "Captured", "captured"],
+        ["first_touch", copy().meta.lang === "ar" ? "أول تواصل" : "First touch", "first-touch"],
+        ["replied", copy().meta.lang === "ar" ? "رد" : "Replies", "reply"],
+        ["handoff", copy().meta.lang === "ar" ? "تسليم" : "Handoff", "handoff"],
+        ["opportunities", copy().meta.lang === "ar" ? "فرص" : "Opportunities", "opportunity"],
+        ["wins", copy().meta.lang === "ar" ? "فوز" : "Wins", "win"],
+      ];
+
+  return `
+    <div class="trend-panels ${compact ? "compact" : ""}">
+      <article class="analytics-block">
+        <div class="analytics-block-head">
+          <h4>${copy().meta.lang === "ar" ? "Trend يومي" : "Daily trend"}</h4>
+          <span class="pill">${daily.length}</span>
+        </div>
+        <div class="trend-stack">
+          ${dailyMetrics.map(([key, label, tone]) => renderTrendRow(daily, key, label, tone, "daily")).join("") || renderEmptyState()}
+        </div>
+      </article>
+      <article class="analytics-block">
+        <div class="analytics-block-head">
+          <h4>${copy().meta.lang === "ar" ? "Trend أسبوعي" : "Weekly trend"}</h4>
+          <span class="pill">${weekly.length}</span>
+        </div>
+        <div class="trend-stack">
+          ${dailyMetrics.map(([key, label, tone]) => renderTrendRow(weekly, key, label, tone, "weekly")).join("") || renderEmptyState()}
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function renderRoiPanel(source) {
+  const roi = getSourceRoiMetrics(source);
+  const funnel = getSourceFunnelMetrics(source);
+  if (!roi || !funnel) {
+    return renderEmptyState();
+  }
+
+  const biggestGapLabelMap = {
+    capture_to_first_touch: copy().meta.lang === "ar" ? "التقاط → أول تواصل" : "Capture → First touch",
+    first_touch_to_reply: copy().meta.lang === "ar" ? "أول تواصل → رد" : "First touch → Reply",
+    reply_to_handoff: copy().meta.lang === "ar" ? "رد → تسليم" : "Reply → Handoff",
+    handoff_to_opportunity: copy().meta.lang === "ar" ? "تسليم → فرصة" : "Handoff → Opportunity",
+    opportunity_to_win: copy().meta.lang === "ar" ? "فرصة → فوز" : "Opportunity → Win",
+  };
+  const biggestGapLabel = biggestGapLabelMap[funnel.biggest_gap] || funnel.biggest_gap || "—";
+
+  const dropoffRows = [
+    [copy().meta.lang === "ar" ? "التقاط → أول تواصل" : "Capture → First touch", funnel.capture_to_first_touch],
+    [copy().meta.lang === "ar" ? "أول تواصل → رد" : "First touch → Reply", funnel.first_touch_to_reply],
+    [copy().meta.lang === "ar" ? "رد → تسليم" : "Reply → Handoff", funnel.reply_to_handoff],
+    [copy().meta.lang === "ar" ? "تسليم → فرصة" : "Handoff → Opportunity", funnel.handoff_to_opportunity],
+    [copy().meta.lang === "ar" ? "فرصة → فوز" : "Opportunity → Win", funnel.opportunity_to_win],
+  ];
+
+  return `
+    <article class="analytics-block roi-block">
+      <div class="analytics-block-head">
+        <h4>${copy().meta.lang === "ar" ? "ROI / Funnel" : "ROI / Funnel"}</h4>
+        <span class="pill">${formatPercent(roi.win_rate)}</span>
+      </div>
+      <div class="roi-grid">
+        <div><span>${copy().meta.lang === "ar" ? "Leads" : "Leads"}</span><strong>${roi.leads}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "Opportunities" : "Opportunities"}</span><strong>${roi.opportunities}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "Wins" : "Wins"}</span><strong>${roi.wins}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "Win rate" : "Win rate"}</span><strong>${formatPercent(roi.win_rate)}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "Conversion" : "Conversion"}</span><strong>${formatPercent(roi.conversion_rate)}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "Value / lead" : "Value / lead"}</span><strong>${formatCurrency(roi.value_per_lead)}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "Pipeline" : "Pipeline"}</span><strong>${formatCurrency(roi.pipeline_value)}</strong></div>
+        <div><span>${copy().meta.lang === "ar" ? "Realized" : "Realized"}</span><strong>${formatCurrency(roi.realized_value)}</strong></div>
+      </div>
+      <div class="dropoff-grid">
+        ${dropoffRows
+          .map(([label, value]) => `<div class="dropoff-pill"><span>${label}</span><strong>${value}</strong></div>`)
+          .join("")}
+      </div>
+      <p class="card-summary">
+        ${
+          copy().meta.lang === "ar"
+            ? `أكبر تسرب حاليًا: ${biggestGapLabel} (${funnel.biggest_gap_value})`
+            : `Current biggest drop-off: ${biggestGapLabel} (${funnel.biggest_gap_value})`
+        }
+      </p>
+    </article>
+  `;
+}
+
+function renderSlaPanel(source) {
+  const rows = getSourceSlaRows(source);
+  return `
+    <article class="analytics-block sla-block">
+      <div class="analytics-block-head">
+        <h4>${copy().meta.lang === "ar" ? "SLA Timers" : "SLA timers"}</h4>
+      </div>
+      <div class="sla-grid">
+        ${rows
+          .map(
+            (row) => `
+              <div class="sla-row">
+                <span>${displayWorkflowBucket(row.bucket)}</span>
+                <strong>${row.total}</strong>
+                <small>${row.overdue ? `${row.overdue} ${copy().meta.lang === "ar" ? "متأخر" : "overdue"}` : row.due_today ? `${row.due_today} ${copy().meta.lang === "ar" ? "اليوم" : "due today"}` : row.stale ? `${row.stale} ${copy().meta.lang === "ar" ? "قديم" : "stale"}` : copy().meta.lang === "ar" ? "على المسار" : "on track"}</small>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderActionSuggestionsPanel(source, { compact = false } = {}) {
+  const suggestions = getSourceNextBestActions(source, compact ? 3 : 4);
+  return `
+    <article class="analytics-block suggestions-block">
+      <div class="analytics-block-head">
+        <h4>${copy().meta.lang === "ar" ? "الاقتراحات التالية" : "Next best actions"}</h4>
+      </div>
+      <div class="suggestions-list">
+        ${suggestions
+          .map(
+            ({ kind, record, recommendation }) => `
+              <button class="suggestion-row" type="button" data-open-record="${kind}:${record.id}">
+                <div>
+                  <strong>${kind === "lead" ? record.company_name : record.company_name}</strong>
+                  <div class="meta-row">${getLocalizedActionReason(recommendation.action, recommendation.reason)}</div>
+                </div>
+                <div class="suggestion-side">
+                  <span class="badge">${getLocalizedActionLabel(recommendation.action)}</span>
+                  <span class="pill">${recommendation.score}</span>
+                </div>
+              </button>
+            `,
+          )
+          .join("") || renderEmptyState()}
+      </div>
+    </article>
+  `;
+}
+
+function renderSourceAnalyticsPanel(source, { compact = false } = {}) {
+  const analytics = getSourceAnalytics(source);
+  if (!analytics) {
+    return renderEmptyState();
+  }
+
+  return `
+    <article class="panel analytics-panel ${compact ? "compact" : ""}">
+      <div class="panel-head">
+        <div>
+          <p class="panel-label">${copy().meta.lang === "ar" ? "تحليل القناة" : "Source analytics"}</p>
+          <h3>${displayChannel(source)}</h3>
+        </div>
+        <span class="pill">${formatPercent(analytics.roi.win_rate)}</span>
+      </div>
+      <div class="analytics-layout ${compact ? "compact" : ""}">
+        ${renderTrendPanel(source, { compact })}
+        ${renderRoiPanel(source)}
+        ${compact ? "" : renderSlaPanel(source)}
+        ${renderActionSuggestionsPanel(source, { compact })}
+      </div>
+    </article>
+  `;
 }
 
 function getFilteredSectors() {
@@ -1782,6 +2188,7 @@ function renderSourceSnapshot(source) {
         <div><span>${copy().meta.lang === "ar" ? "جاهزة للتحويل" : "Ready for handoff"}</span><strong>${metrics.readyForHandoff}</strong></div>
         <div><span>${copy().meta.lang === "ar" ? "فرص ناتجة" : "Progressed opportunities"}</span><strong>${metrics.opportunities}</strong></div>
       </div>
+      ${renderSourceAnalyticsPanel(source)}
       ${executionAlert ? `<p class="source-target-banner warning inline-warning">${executionAlert}</p>` : ""}
       <p class="card-summary">
         ${
@@ -1798,6 +2205,8 @@ function renderSourceLeadCard(lead) {
   const sector = getSectorById(lead.sector_id);
   const computedStage = getComputedLeadStage(lead, todayDate());
   const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
+  const sla = getLeadSlaState(lead, todayDate());
+  const nextAction = getLeadNextBestAction(lead, state.data.opportunities, todayDate());
   const linkedOpportunity = getOpportunityByLeadId(lead.id);
   const canConvert =
     workflowBucket === "Ready for Handoff" &&
@@ -1813,7 +2222,11 @@ function renderSourceLeadCard(lead) {
             <strong dir="${inferTextDirection(lead.company_name)}">${lead.company_name}</strong>
             <span class="mixed-meta" dir="auto">${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}</span>
           </div>
-          <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${displayStage(computedStage)}</span>
+          <div class="badge-stack">
+            <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${displayStage(computedStage)}</span>
+            <span class="badge ${sla.state === "overdue" ? "danger" : sla.state === "due_today" ? "warning" : sla.state === "stale" ? "muted" : ""}">${getLocalizedSlaLabel(sla.state, sla.label)}${sla.age_days ? ` • ${sla.age_days}d` : ""}</span>
+            <span class="badge action-${nextAction.action}">${getLocalizedActionLabel(nextAction.action)}</span>
+          </div>
         </div>
         <div class="meta-list">
           <span dir="auto"><span class="source-badge">${displayChannel(lead.channel)}</span> • ${sector?.sector_name || "—"}</span>
@@ -2040,6 +2453,8 @@ function renderLeadCommandRow(lead, options = {}) {
   const sector = getSectorById(lead.sector_id);
   const workflowBucket = getLeadWorkflowBucket(lead, state.data.opportunities);
   const computedStage = getComputedLeadStage(lead, todayDate());
+  const sla = getLeadSlaState(lead, todayDate());
+  const nextAction = getLeadNextBestAction(lead, state.data.opportunities, todayDate());
   const linkedOpportunity = getOpportunityByLeadId(lead.id);
   const commandState = getLeadCommandState(lead);
   const signal = compactText(
@@ -2075,6 +2490,8 @@ function renderLeadCommandRow(lead, options = {}) {
       <div class="command-row-meta">
         <span class="source-badge">${displayChannel(lead.channel)}</span>
         <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${displayWorkflowBucket(workflowBucket)}</span>
+        <span class="badge ${sla.state === "overdue" ? "danger" : sla.state === "due_today" ? "warning" : sla.state === "stale" ? "muted" : ""}">${getLocalizedSlaLabel(sla.state, sla.label)}${sla.age_days ? ` • ${sla.age_days}d` : ""}</span>
+        <span class="badge action-${nextAction.action}">${getLocalizedActionLabel(nextAction.action)}</span>
         <span class="badge">${sector?.sector_name || displayStage(computedStage)}</span>
         <span class="badge ${leadNeedsFirstTouch(lead) ? "warning" : ""}">${operationalLabel}</span>
         <span class="badge ${commandState.urgencyClass} command-urgency">${commandState.urgencyLabel}</span>
@@ -2126,6 +2543,23 @@ function renderAnalysisScreen() {
         </div>
         <div class="command-zone-list">
           ${actionQueue.length ? actionQueue.map(({ lead }) => renderLeadCommandRow(lead, { preferConvert: true })).join("") : renderEmptyState()}
+        </div>
+      </section>
+
+      <section class="analysis-analytics-section">
+        <div class="command-zone-head">
+          <div>
+            <p class="panel-label">${copy().meta.lang === "ar" ? "تحليلات القنوات" : "Source analytics"}</p>
+            <h2>${copy().meta.lang === "ar" ? "Trend / ROI / SLA" : "Trend / ROI / SLA"}</h2>
+            <p class="zone-copy">${
+              copy().meta.lang === "ar"
+                ? "كل مصدر يوضح أين ينمو، أين يتسرب، وأي إجراء هو التالي."
+                : "Each source shows where it is growing, where it leaks, and what action comes next."
+            }</p>
+          </div>
+        </div>
+        <div class="analysis-analytics-grid">
+          ${sourceRows.length ? sourceRows.map(({ source }) => renderSourceAnalyticsPanel(source, { compact: true })).join("") : renderEmptyState()}
         </div>
       </section>
 
@@ -2511,6 +2945,8 @@ function renderLeadDrawer(lead) {
   const computedStage = getComputedLeadStage(lead, todayDate());
   const sector = getSectorById(lead.sector_id);
   const linkedOpportunity = getOpportunityByLeadId(lead.id);
+  const sla = getLeadSlaState(lead, todayDate());
+  const nextAction = getLeadNextBestAction(lead, state.data.opportunities, todayDate());
   const eligibleForOpportunity =
     lead.current_stage === "Handoff Sent" &&
     lead.handoff_summary &&
@@ -2564,6 +3000,8 @@ function renderLeadDrawer(lead) {
         </div>
         <div class="lead-hero-status">
           <span class="badge ${computedStage === "Delayed" ? "danger" : ""}">${leadStatusLabel}</span>
+          <span class="badge ${sla.state === "overdue" ? "danger" : sla.state === "due_today" ? "warning" : sla.state === "stale" ? "muted" : ""}">${getLocalizedSlaLabel(sla.state, sla.label)}${sla.age_days ? ` • ${sla.age_days}d` : ""}</span>
+          <span class="badge action-${nextAction.action}">${getLocalizedActionLabel(nextAction.action)}</span>
           <span class="lead-score-pill">${isArabic ? "سكور" : "Score"} ${lead.lead_score}</span>
         </div>
       </div>
@@ -2579,6 +3017,11 @@ function renderLeadDrawer(lead) {
         <span class="lead-chip">${channelLabel}</span>
         <span class="lead-chip" dir="${inferTextDirection(sectorLabel)}">${sectorLabel}</span>
         <span class="lead-chip">${getLeadOperationalStateLabel(effectiveOperationalState)}</span>
+      </div>
+      <div class="lead-insight-row">
+        <span class="insight-chip">${isArabic ? "اقتراح" : "Suggestion"}: ${getLocalizedActionLabel(nextAction.action)}</span>
+        <span class="insight-chip">${isArabic ? "العمر" : "Age"}: ${sla.age_days}d</span>
+        <span class="insight-chip">${getLocalizedSlaLabel(sla.state, sla.label)}</span>
       </div>
       <div class="lead-summary-grid">
         ${renderLeadSummaryStat(isArabic ? "أول تواصل" : "First touch", firstTouchLabel, { tone: needsFirstTouch ? "alert" : "" })}
@@ -2681,6 +3124,8 @@ function renderLeadDrawer(lead) {
 function renderOpportunityDrawer(opportunity) {
   const sector = getSectorById(opportunity.sector_id);
   const computedStage = getComputedOpportunityStage(opportunity, todayDate());
+  const sla = getOpportunitySlaState(opportunity, todayDate());
+  const nextAction = getOpportunityNextBestAction(opportunity, todayDate());
   const guardFlags = getOpportunityGuardFlags(opportunity, todayDate());
   const readinessGaps = getOpportunityReadinessGaps(opportunity);
   return `
@@ -2697,6 +3142,11 @@ function renderOpportunityDrawer(opportunity) {
       ${fieldRow(getFieldLabel("estimatedValue", "Estimated Value"), formatCurrency(opportunity.estimated_value))}
       ${fieldRow(getFieldLabel("currentStage", "Current Stage"), displayStage(computedStage))}
       ${fieldRow(getFieldLabel("buyerReadiness", "Buyer Readiness"), opportunity.buyer_readiness)}
+      <div class="lead-insight-row">
+        <span class="insight-chip">${isFinite(sla.age_days) ? `${getLocalizedSlaLabel(sla.state, sla.label)} • ${sla.age_days}d` : getLocalizedSlaLabel(sla.state, sla.label)}</span>
+        <span class="insight-chip">${copy().meta.lang === "ar" ? "اقتراح" : "Suggestion"}: ${getLocalizedActionLabel(nextAction.action)}</span>
+        <span class="insight-chip">${getLocalizedActionReason(nextAction.action, nextAction.reason)}</span>
+      </div>
     </section>
     <section class="drawer-section">
       <h4>${getFieldLabel("painValue", "Pain & Value")}</h4>

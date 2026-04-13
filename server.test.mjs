@@ -29,6 +29,57 @@ test("GET /state returns shared state with metadata", async () => {
     assert.ok(state.sectors[0].created_at);
     assert.ok(state.sectors[0].updated_at);
     assert.ok(state.sectors[0].updated_by);
+    assert.ok(state.analytics);
+    assert.ok(state.analytics.sources.WhatsApp);
+    assert.equal(state.analytics.sources.WhatsApp.trend.daily.length, 14);
+  } finally {
+    await app.stop();
+  }
+});
+
+test("POST /leads updates analytics rollups for the source", async () => {
+  const { app, baseUrl } = await startTestServer();
+
+  try {
+    const beforeResponse = await fetch(`${baseUrl}/state`);
+    const beforeState = await beforeResponse.json();
+    const beforeLeads = beforeState.analytics.sources.WhatsApp.roi.leads;
+    const beforeCapturedToday = beforeState.analytics.sources.WhatsApp.funnel.captured;
+
+    const response = await fetch(`${baseUrl}/leads`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User": "analytics-user",
+      },
+      body: JSON.stringify({
+        id: "lead-analytics",
+        company_name: "Analytics Clinic",
+        sector_id: "sector-clinics",
+        contact_name: "Noor",
+        role: "Owner",
+        channel: "WhatsApp",
+        owner: "Admin",
+        current_stage: "Targeted",
+        next_step: "Send opener",
+        next_step_date: "2026-04-13",
+        notes: "",
+        pain_signal: "Missed calls after hours",
+        urgency_level: "Medium",
+        decision_level: "Owner",
+        interest_type: "New",
+        lead_score: 12,
+        last_contact_date: "2026-04-13",
+        handoff_summary: "",
+        stage_updated_at: "2026-04-13",
+      }),
+    });
+
+    const afterState = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(afterState.analytics.sources.WhatsApp.roi.leads, beforeLeads + 1);
+    assert.equal(afterState.analytics.sources.WhatsApp.funnel.captured, beforeCapturedToday + 1);
   } finally {
     await app.stop();
   }

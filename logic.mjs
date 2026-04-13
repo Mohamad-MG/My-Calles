@@ -248,6 +248,33 @@ function getLeadWorkflowBucket(lead, opportunities = [], today = todayDate()) {
   return "Needs Extraction";
 }
 
+function leadNeedsFirstTouch(lead) {
+  return Boolean(lead) && Boolean(lead.created_at) && !Boolean(lead.first_touch_at);
+}
+
+function getLeadFollowUpDueDate(lead) {
+  return typeof lead?.follow_up_due_at === "string" ? lead.follow_up_due_at.slice(0, 10) : "";
+}
+
+function getLeadFollowUpTiming(lead) {
+  const dueDate = getLeadFollowUpDueDate(lead);
+  const today = todayDate();
+
+  if (!dueDate) {
+    return "none";
+  }
+
+  if (dueDate < today) {
+    return "overdue";
+  }
+
+  if (dueDate === today) {
+    return "due_today";
+  }
+
+  return "not_due_yet";
+}
+
 function isLeadClosed(stage) {
   return ["Disqualified", "No Response"].includes(stage);
 }
@@ -648,6 +675,588 @@ function getMetrics(state, today = todayDate()) {
   };
 }
 
+function parseDateOnly(dateValue) {
+  if (!dateValue) {
+    return null;
+  }
+
+  const parsed = String(dateValue).length <= 10
+    ? new Date(`${dateValue}T12:00:00`)
+    : new Date(dateValue);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getDaysBetween(startValue, endValue) {
+  const start = parseDateOnly(startValue);
+  const end = parseDateOnly(endValue);
+  if (!start || !end) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
+}
+
+function getIsoWeekKey(dateValue) {
+  const parsed = parseDateOnly(dateValue);
+  if (!parsed) {
+    return "";
+  }
+
+  const utc = new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
+  const day = (utc.getUTCDay() + 6) % 7;
+  utc.setUTCDate(utc.getUTCDate() - day + 3);
+
+  const firstThursday = new Date(Date.UTC(utc.getUTCFullYear(), 0, 4));
+  const firstThursdayDay = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstThursdayDay + 3);
+
+  const weekNumber = 1 + Math.round((utc - firstThursday) / 604800000);
+  return `${utc.getUTCFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
+}
+
+function collectDashboardSources(state) {
+  const seededSources = Object.keys(state?.weeklyFocus?.source_targets || {});
+  const liveSources = [
+    ...(state?.leads || []).map((lead) => lead.channel).filter(Boolean),
+    ...(state?.opportunities || [])
+      .map((opportunity) => {
+        const originLead = (state?.leads || []).find((lead) => lead.id === opportunity.origin_lead_id);
+        return originLead?.channel;
+      })
+      .filter(Boolean),
+  ];
+
+  return [...new Set([...seededSources, ...liveSources])];
+}
+
+function getLeadSlaState(lead, today = todayDate()) {
+  const computedStage = getComputedLeadStage(lead, today);
+  const workflowBucket = getLeadWorkflowBucket(lead, [], today);
+  const followUpTiming = getLeadFollowUpTiming(lead);
+  const anchorDate =
+    lead?.follow_up_due_at ||
+    lead?.stage_updated_at ||
+    lead?.updated_at ||
+    lead?.created_at ||
+    today;
+
+  const staleThresholds = {
+    New: 2,
+    "Needs Extraction": 2,
+    "Needs Reply": 2,
+    "Needs Qualification": 3,
+    "Ready for Handoff": 1,
+    "Closed / Disqualified": 7,
+  };
+
+  let stateValue = "active";
+  let label = "On track";
+  if (followUpTiming === "overdue" || computedStage === "Delayed") {
+    stateValue = "overdue";
+    label = "Overdue";
+  } else if (followUpTiming === "due_today") {
+    stateValue = "due_today";
+    label = "Due today";
+  } else if (getDaysBetween(anchorDate, today) >= (staleThresholds[workflowBucket] ?? 3)) {
+    stateValue = "stale";
+    label = "Stale";
+  }
+
+  return {
+    state: stateValue,
+    label,
+    age_days: getDaysBetween(anchorDate, today),
+    bucket: workflowBucket,
+    anchor_date: anchorDate,
+    stage: computedStage,
+  };
+}
+
+function getOpportunitySlaState(opportunity, today = todayDate()) {
+  const computedStage = getComputedOpportunityStage(opportunity, today);
+  const anchorDate =
+    opportunity?.next_step_date ||
+    opportunity?.stage_updated_at ||
+    opportunity?.updated_at ||
+    opportunity?.created_at ||
+    today;
+  const staleThresholds = {
+    Discovery: 3,
+    "Qualified Interest": 3,
+    "Demo Needed": 4,
+    "Pilot Candidate": 4,
+    "Proposal Stage": 5,
+    Negotiation: 5,
+    "Close Ready": 5,
+  };
+
+  let stateValue = "active";
+  let label = "On track";
+  if (computedStage === "Delayed") {
+    stateValue = "overdue";
+    label = "Overdue";
+  } else if (opportunity?.next_step_date === today) {
+    stateValue = "due_today";
+    label = "Due today";
+  } else if (getDaysBetween(anchorDate, today) >= (staleThresholds[computedStage] ?? 4)) {
+    stateValue = "stale";
+    label = "Stale";
+  }
+
+  return {
+    state: stateValue,
+    label,
+    age_days: getDaysBetween(anchorDate, today),
+    stage: computedStage,
+    anchor_date: anchorDate,
+  };
+}
+
+function getSectorSlaState(sector, today = todayDate()) {
+  const computedStatus = getComputedSectorStatus(sector, today);
+  const anchorDate = sector?.next_step_date || sector?.updated_at || sector?.created_at || today;
+  const ageDays = getDaysBetween(anchorDate, today);
+  let stateValue = "active";
+  let label = "On track";
+
+  if (computedStatus === "Delayed") {
+    stateValue = "overdue";
+    label = "Overdue";
+  } else if (sector?.next_step_date === today) {
+    stateValue = "due_today";
+    label = "Due today";
+  } else if (ageDays >= 5) {
+    stateValue = "stale";
+    label = "Stale";
+  }
+
+  return {
+    state: stateValue,
+    label,
+    age_days: ageDays,
+    stage: computedStatus,
+    anchor_date: anchorDate,
+  };
+}
+
+function getLeadNextBestAction(lead, opportunities = [], today = todayDate()) {
+  const workflowBucket = getLeadWorkflowBucket(lead, opportunities, today);
+  const timing = getLeadFollowUpTiming(lead);
+  const linkedOpportunity = opportunities.find((opportunity) => opportunity.origin_lead_id === lead?.id);
+  const signalMissing = isBlank(lead?.pain_signal);
+  const staleDays = getDaysBetween(lead?.stage_updated_at || lead?.created_at || today, today);
+
+  if (!lead || isLeadClosed(lead.current_stage)) {
+    return {
+      action: "disqualify",
+      score: 0,
+      label: "Disqualify",
+      reason: "Closed lead",
+    };
+  }
+
+  if (lead.current_stage === "Handoff Sent" && lead.handoff_summary && !linkedOpportunity) {
+    return {
+      action: "handoff",
+      score: 95,
+      label: "Handoff",
+      reason: "Ready to convert into an opportunity",
+    };
+  }
+
+  if (leadNeedsFirstTouch(lead)) {
+    return {
+      action: "opener",
+      score: 92,
+      label: "Opener",
+      reason: "Captured but still missing first touch",
+    };
+  }
+
+  if (timing === "overdue" || timing === "due_today" || workflowBucket === "Needs Reply") {
+    return {
+      action: "follow-up",
+      score: timing === "overdue" ? 90 : timing === "due_today" ? 84 : 76,
+      label: "Follow-up",
+      reason: timing === "overdue" ? "Follow-up is overdue" : "Follow-up is due",
+    };
+  }
+
+  if (signalMissing && staleDays >= 4) {
+    return {
+      action: "disqualify",
+      score: 78,
+      label: "Disqualify",
+      reason: "No useful pain signal and the record is aging out",
+    };
+  }
+
+  if (workflowBucket === "Ready for Handoff") {
+    return {
+      action: "handoff",
+      score: 88,
+      label: "Handoff",
+      reason: "Lead is ready for a clean handoff",
+    };
+  }
+
+  if (workflowBucket === "Needs Qualification") {
+    return {
+      action: "follow-up",
+      score: 68,
+      label: "Follow-up",
+      reason: "Qualification is the next step",
+    };
+  }
+
+  return {
+    action: "follow-up",
+    score: 52,
+    label: "Follow-up",
+    reason: "Keep momentum moving",
+  };
+}
+
+function getOpportunityNextBestAction(opportunity, today = todayDate()) {
+  const nextStepTiming = opportunity?.next_step_date
+    ? compareDateOnly(opportunity.next_step_date, today) < 0
+      ? "overdue"
+      : opportunity.next_step_date === today
+        ? "due_today"
+        : "upcoming"
+    : "none";
+  const sla = getOpportunitySlaState(opportunity, today);
+
+  if (!opportunity || isOpportunityClosed(opportunity.current_stage)) {
+    return {
+      action: "disqualify",
+      score: 0,
+      label: "Disqualify",
+      reason: "Closed opportunity",
+    };
+  }
+
+  if (sla.state === "overdue" || nextStepTiming === "overdue") {
+    return {
+      action: "follow-up",
+      score: 92,
+      label: "Follow-up",
+      reason: "Opportunity is overdue for action",
+    };
+  }
+
+  if (nextStepTiming === "due_today") {
+    return {
+      action: "follow-up",
+      score: 84,
+      label: "Follow-up",
+      reason: "Next step is due today",
+    };
+  }
+
+  if (opportunity.current_stage === "Proposal Stage" && sla.state === "stale") {
+    return {
+      action: "follow-up",
+      score: 82,
+      label: "Follow-up",
+      reason: "Proposal needs a push",
+    };
+  }
+
+  if (["Discovery", "Qualified Interest"].includes(opportunity.current_stage) && sla.state === "stale") {
+    return {
+      action: "disqualify",
+      score: 70,
+      label: "Disqualify",
+      reason: "No movement in discovery",
+    };
+  }
+
+  return {
+    action: "follow-up",
+    score: 58,
+    label: "Follow-up",
+    reason: "Keep the opportunity warm",
+  };
+}
+
+function buildDashboardAnalytics(state, auditRecords = null, options = {}) {
+  const today = options.today || todayDate();
+  const dailyWindow = Number(options.dailyWindow || 14);
+  const weeklyWindow = Number(options.weeklyWindow || 8);
+  const todayDateValue = parseDateOnly(today) || new Date();
+  const sources = collectDashboardSources(state);
+
+  const dailyDates = Array.from({ length: dailyWindow }, (_, index) => {
+    const day = new Date(todayDateValue);
+    day.setDate(day.getDate() - (dailyWindow - 1 - index));
+    return day.toISOString().slice(0, 10);
+  });
+  const weeklyKeys = Array.from({ length: weeklyWindow }, (_, index) => {
+    const day = new Date(todayDateValue);
+    day.setDate(day.getDate() - (7 * (weeklyWindow - 1 - index)));
+    return getIsoWeekKey(day.toISOString().slice(0, 10));
+  });
+
+  const sourceMap = Object.fromEntries(
+    sources.map((source) => [
+      source,
+      {
+        source,
+        trend: {
+          daily: dailyDates.map((date) => ({
+            date,
+            captured: 0,
+            first_touch: 0,
+            replied: 0,
+            handoff: 0,
+            opportunities: 0,
+            wins: 0,
+          })),
+          weekly: weeklyKeys.map((week) => ({
+            week,
+            captured: 0,
+            first_touch: 0,
+            replied: 0,
+            handoff: 0,
+            opportunities: 0,
+            wins: 0,
+          })),
+        },
+        funnel: {
+          captured: 0,
+          first_touch: 0,
+          replied: 0,
+          handoff: 0,
+          opportunities: 0,
+          wins: 0,
+          capture_to_first_touch: 0,
+          first_touch_to_reply: 0,
+          reply_to_handoff: 0,
+          handoff_to_opportunity: 0,
+          opportunity_to_win: 0,
+          biggest_gap: "",
+          biggest_gap_value: 0,
+        },
+        roi: {
+          leads: 0,
+          opportunities: 0,
+          wins: 0,
+          pipeline_value: 0,
+          realized_value: 0,
+          total_value: 0,
+          value_per_lead: 0,
+          conversion_rate: 0,
+          win_rate: 0,
+        },
+        latest_activity: "",
+      },
+    ]),
+  );
+
+  const incrementEvent = (event) => {
+    if (!event?.source || !sourceMap[event.source]) {
+      return;
+    }
+
+    const sourceEntry = sourceMap[event.source];
+    const dailyEntry = sourceEntry.trend.daily.find((item) => item.date === event.date);
+    const weeklyEntry = sourceEntry.trend.weekly.find((item) => item.week === event.week);
+
+    if (dailyEntry && event.kind in dailyEntry) {
+      dailyEntry[event.kind] += 1;
+    }
+    if (weeklyEntry && event.kind in weeklyEntry) {
+      weeklyEntry[event.kind] += 1;
+    }
+  };
+
+  const baselineEvents = [
+    ...(state.leads || [])
+      .filter((lead) => !lead.archived && lead.channel)
+      .flatMap((lead) => {
+        const events = [
+          {
+            source: lead.channel,
+            date: (lead.created_at || today).slice(0, 10),
+            week: getIsoWeekKey(lead.created_at || today),
+            kind: "captured",
+          },
+        ];
+        if (lead.first_touch_at) {
+          events.push({
+            source: lead.channel,
+            date: lead.first_touch_at.slice(0, 10),
+            week: getIsoWeekKey(lead.first_touch_at),
+            kind: "first_touch",
+          });
+        }
+        if (lead.responded_at) {
+          events.push({
+            source: lead.channel,
+            date: lead.responded_at.slice(0, 10),
+            week: getIsoWeekKey(lead.responded_at),
+            kind: "replied",
+          });
+        }
+        if (lead.current_stage === "Handoff Sent" || lead.handoff_summary) {
+          const anchor = lead.stage_updated_at || lead.updated_at || lead.created_at || today;
+          events.push({
+            source: lead.channel,
+            date: anchor.slice(0, 10),
+            week: getIsoWeekKey(anchor),
+            kind: "handoff",
+          });
+        }
+        return events;
+      }),
+    ...(state.opportunities || [])
+      .flatMap((opportunity) => {
+        const originLead = (state.leads || []).find((lead) => lead.id === opportunity.origin_lead_id);
+        if (!originLead || originLead.archived || !originLead.channel) {
+          return [];
+        }
+
+        const events = [
+          {
+            source: originLead.channel,
+            date: (opportunity.created_at || opportunity.stage_updated_at || today).slice(0, 10),
+            week: getIsoWeekKey(opportunity.created_at || opportunity.stage_updated_at || today),
+            kind: "opportunities",
+          },
+        ];
+
+        if (opportunity.current_stage === "Won") {
+          const anchor = opportunity.stage_updated_at || opportunity.updated_at || opportunity.created_at || today;
+          events.push({
+            source: originLead.channel,
+            date: anchor.slice(0, 10),
+            week: getIsoWeekKey(anchor),
+            kind: "wins",
+          });
+        }
+
+        return events;
+      }),
+  ];
+
+  const auditEvents = Array.isArray(auditRecords)
+    ? auditRecords
+        .filter((entry) => !["restore-seed", "reset-shared"].includes(entry.action))
+        .flatMap((entry) => {
+          const date = typeof entry.timestamp === "string" ? entry.timestamp.slice(0, 10) : today;
+          const week = getIsoWeekKey(date);
+          if (entry.entity === "leads") {
+            const source = entry.after?.channel || entry.before?.channel || "";
+            const events = [];
+            if (entry.action === "create") {
+              events.push({ source, date, week, kind: "captured" });
+            }
+            if (isBlank(entry.before?.first_touch_at) && !isBlank(entry.after?.first_touch_at)) {
+              events.push({ source, date, week, kind: "first_touch" });
+            }
+            if (isBlank(entry.before?.responded_at) && !isBlank(entry.after?.responded_at)) {
+              events.push({ source, date, week, kind: "replied" });
+            }
+            if (entry.before?.current_stage !== "Handoff Sent" && entry.after?.current_stage === "Handoff Sent") {
+              events.push({ source, date, week, kind: "handoff" });
+            }
+            return events;
+          }
+
+          if (entry.entity === "opportunities") {
+            const originLeadId = entry.after?.origin_lead_id || entry.before?.origin_lead_id;
+            const originLead = (state.leads || []).find((lead) => lead.id === originLeadId);
+            const source = originLead?.channel || "";
+            const events = [];
+            if (entry.action === "create") {
+              events.push({ source, date, week, kind: "opportunities" });
+            }
+            if (entry.before?.current_stage !== "Won" && entry.after?.current_stage === "Won") {
+              events.push({ source, date, week, kind: "wins" });
+            }
+            return events;
+          }
+
+          return [];
+        })
+    : [];
+
+  const eventsToUse = auditEvents.length ? auditEvents : baselineEvents;
+  eventsToUse.forEach(incrementEvent);
+
+  sources.forEach((source) => {
+    const sourceEntry = sourceMap[source];
+    const sourceLeads = (state.leads || []).filter((lead) => !lead.archived && lead.channel === source);
+    const sourceOpportunities = (state.opportunities || []).filter((opportunity) => {
+      const originLead = (state.leads || []).find((lead) => lead.id === opportunity.origin_lead_id);
+      return originLead && !originLead.archived && originLead.channel === source;
+    });
+
+    const leadCount = sourceLeads.length;
+    const opportunityCount = sourceOpportunities.length;
+    const wins = sourceOpportunities.filter((opportunity) => opportunity.current_stage === "Won").length;
+    const pipelineValue = sourceOpportunities
+      .filter((opportunity) => !["Won", "Lost"].includes(opportunity.current_stage))
+      .reduce((total, opportunity) => total + coerceNumber(opportunity.estimated_value), 0);
+    const realizedValue = sourceOpportunities
+      .filter((opportunity) => opportunity.current_stage === "Won")
+      .reduce((total, opportunity) => total + coerceNumber(opportunity.estimated_value), 0);
+    const captured = sourceLeads.filter((lead) => !isBlank(lead.created_at)).length;
+    const firstTouch = sourceLeads.filter((lead) => !isBlank(lead.first_touch_at)).length;
+    const replied = sourceLeads.filter((lead) => !isBlank(lead.responded_at)).length;
+    const handoff = sourceLeads.filter(
+      (lead) => lead.current_stage === "Handoff Sent" || !isBlank(lead.handoff_summary),
+    ).length;
+
+    sourceEntry.funnel.captured = captured;
+    sourceEntry.funnel.first_touch = firstTouch;
+    sourceEntry.funnel.replied = replied;
+    sourceEntry.funnel.handoff = handoff;
+    sourceEntry.funnel.opportunities = opportunityCount;
+    sourceEntry.funnel.wins = wins;
+    sourceEntry.funnel.capture_to_first_touch = Math.max(0, captured - firstTouch);
+    sourceEntry.funnel.first_touch_to_reply = Math.max(0, firstTouch - replied);
+    sourceEntry.funnel.reply_to_handoff = Math.max(0, replied - handoff);
+    sourceEntry.funnel.handoff_to_opportunity = Math.max(0, handoff - opportunityCount);
+    sourceEntry.funnel.opportunity_to_win = Math.max(0, opportunityCount - wins);
+
+    const biggestGap = [
+      ["capture_to_first_touch", sourceEntry.funnel.capture_to_first_touch],
+      ["first_touch_to_reply", sourceEntry.funnel.first_touch_to_reply],
+      ["reply_to_handoff", sourceEntry.funnel.reply_to_handoff],
+      ["handoff_to_opportunity", sourceEntry.funnel.handoff_to_opportunity],
+      ["opportunity_to_win", sourceEntry.funnel.opportunity_to_win],
+    ].sort((left, right) => right[1] - left[1])[0];
+    sourceEntry.funnel.biggest_gap = biggestGap?.[0] || "";
+    sourceEntry.funnel.biggest_gap_value = biggestGap?.[1] || 0;
+
+    sourceEntry.roi.leads = leadCount;
+    sourceEntry.roi.opportunities = opportunityCount;
+    sourceEntry.roi.wins = wins;
+    sourceEntry.roi.pipeline_value = pipelineValue;
+    sourceEntry.roi.realized_value = realizedValue;
+    sourceEntry.roi.total_value = pipelineValue + realizedValue;
+    sourceEntry.roi.value_per_lead = leadCount ? (pipelineValue + realizedValue) / leadCount : 0;
+    sourceEntry.roi.conversion_rate = captured ? opportunityCount / captured : 0;
+    sourceEntry.roi.win_rate = opportunityCount ? wins / opportunityCount : 0;
+    sourceEntry.latest_activity = [
+      ...sourceLeads.map((lead) => lead.updated_at || lead.created_at || ""),
+      ...sourceOpportunities.map((opportunity) => opportunity.updated_at || opportunity.created_at || ""),
+    ]
+      .filter(Boolean)
+      .sort()
+      .at(-1) || "";
+  });
+
+  return {
+    generated_at: `${today}T00:00:00Z`,
+    daily_window: dailyWindow,
+    weekly_window: weeklyWindow,
+    sources: sourceMap,
+  };
+}
+
 function enforceSingleActiveSector(state, sectorId) {
   const nextState = deepClone(state);
   const hasTargetSector = nextState.sectors.some((sector) => sector.id === sectorId);
@@ -726,10 +1335,11 @@ function normalizeDashboardState(candidate) {
   return normalized;
 }
 
-function serializeDashboardState(data) {
+function serializeDashboardState(data, analytics = null) {
   return JSON.stringify({
     version: STORAGE_VERSION,
     data: normalizeDashboardState(data),
+    analytics: analytics ? deepClone(analytics) : null,
   });
 }
 
@@ -741,7 +1351,14 @@ function parseDashboardState(serialized) {
   try {
     const parsed = JSON.parse(serialized);
     if (parsed && typeof parsed === "object" && "data" in parsed) {
-      return normalizeDashboardState(parsed.data);
+      const normalized = normalizeDashboardState(parsed.data);
+      if (parsed.analytics) {
+        return {
+          ...normalized,
+          analytics: deepClone(parsed.analytics),
+        };
+      }
+      return normalized;
     }
 
     return normalizeDashboardState(parsed);
@@ -1083,12 +1700,18 @@ export {
   getOpportunityReadinessGaps,
   getComputedOpportunityStage,
   getComputedSectorStatus,
+  buildDashboardAnalytics,
   getMetrics,
   getRequiredValidationErrors,
   getTodayQueue,
+  getLeadNextBestAction,
+  getLeadSlaState,
   getLeadWorkflowBucket,
   hasOpportunityForLead,
   hydrateDashboardState,
+  getOpportunityNextBestAction,
+  getOpportunitySlaState,
+  getSectorSlaState,
   normalizeDashboardState,
   parseDashboardState,
   serializeDashboardState,

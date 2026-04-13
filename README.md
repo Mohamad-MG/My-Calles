@@ -8,6 +8,7 @@ Current release candidate UX:
 - Inbox workflow grouped by source-first stages
 - Progression rail that keeps lead-to-opportunity continuity visible
 - Shared persistent state, audit logging, and validation observability
+- Source analytics now include trend charts, ROI summaries, SLA timers, and next-best-action guidance per source
 
 ## Local Run
 
@@ -30,6 +31,7 @@ The server provides:
 - Shared persistent dashboard state
 - Audit logging for every mutation
 - Lightweight observability for validation
+- `/state` now includes analytics rollups used by the source trend and ROI panels
 
 State is stored under `data/` and is shared across sessions.
 
