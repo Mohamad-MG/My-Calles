@@ -2461,7 +2461,7 @@ function renderLeadCommandRow(lead, options = {}) {
     lead.pain_signal || lead.notes || getValueLabel("noSignalCaptured", "No signal captured yet."),
     options.signalLimit || 92,
   );
-  const nextAction = compactText(
+  const nextStepText = compactText(
     lead.next_step || getValueLabel("noImmediateNextStep", "No immediate next step"),
     options.stepLimit || 58,
   );
@@ -2485,7 +2485,7 @@ function renderLeadCommandRow(lead, options = {}) {
           <span class="mixed-meta" dir="auto">${lead.contact_name} • ${lead.role || getValueLabel("noRole", "No role")}</span>
         </div>
         <div class="command-signal" dir="${inferTextDirection(signal)}">${signal}</div>
-        <div class="command-next" dir="${inferTextDirection(nextAction)}">${nextAction}</div>
+        <div class="command-next" dir="${inferTextDirection(nextStepText)}">${nextStepText}</div>
       </button>
       <div class="command-row-meta">
         <span class="source-badge">${displayChannel(lead.channel)}</span>
