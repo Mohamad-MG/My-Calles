@@ -1187,8 +1187,24 @@ function getSourceAnalytics(source) {
   return state.analytics?.sources?.[source] || buildDashboardAnalytics(state.data)?.sources?.[source] || null;
 }
 
+function getSourceClassName(source) {
+  const slug = String(source || "source")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `source-${slug || "source"}`;
+}
+
 function formatPercent(value) {
   return `${Math.round((Number(value) || 0) * 100)}%`;
+}
+
+function formatAnalyticsActivity(value) {
+  if (!value) {
+    return null;
+  }
+
+  return formatDate(String(value).slice(0, 10));
 }
 
 function getLocalizedActionLabel(action) {
@@ -1302,6 +1318,89 @@ function getSourceNextBestActions(source, limit = 4) {
   return [...leadActions, ...opportunityActions]
     .sort((left, right) => right.recommendation.score - left.recommendation.score)
     .slice(0, limit);
+}
+
+function renderAnalyticsSummaryStrip(source, { compact = false } = {}) {
+  const analytics = getSourceAnalytics(source);
+  if (!analytics) {
+    return "";
+  }
+
+  const roi = analytics.roi || {};
+  const funnel = analytics.funnel || {};
+  const latestActivity = formatAnalyticsActivity(analytics.latest_activity);
+  const isArabic = copy().meta.lang === "ar";
+  const cards = compact
+    ? [
+        {
+          label: isArabic ? "جهات" : "Leads",
+          value: roi.leads,
+          note: isArabic ? "حجم المصدر الحالي" : "Current source volume",
+        },
+        {
+          label: isArabic ? "فرص" : "Opportunities",
+          value: roi.opportunities,
+          note: isArabic ? "جهات وصلت لمرحلة التحويل" : "Leads that reached handoff",
+        },
+        {
+          label: isArabic ? "معدل الفوز" : "Win rate",
+          value: formatPercent(roi.win_rate),
+          note: isArabic ? "كفاءة الإغلاق" : "Closing efficiency",
+        },
+        {
+          label: isArabic ? "آخر نشاط" : "Latest activity",
+          value: latestActivity || "—",
+          note: isArabic ? "آخر حركة في المصدر" : "Most recent movement in this source",
+        },
+      ]
+    : [
+        {
+          label: isArabic ? "الملتقطة" : "Captured",
+          value: funnel.captured,
+          note: isArabic ? "الجهات الملتقطة" : "Tracked leads",
+        },
+        {
+          label: isArabic ? "الردود" : "Replies",
+          value: funnel.replied,
+          note: isArabic ? "الردود الفعّالة" : "Active replies",
+        },
+        {
+          label: isArabic ? "الفرص" : "Opportunities",
+          value: roi.opportunities,
+          note: isArabic ? "جهات تحولت" : "Converted handoffs",
+        },
+        {
+          label: isArabic ? "التسليمات" : "Handoffs",
+          value: funnel.handoff,
+          note: isArabic ? "التسليمات الجاهزة" : "Ready transfers",
+        },
+        {
+          label: isArabic ? "معدل الفوز" : "Win rate",
+          value: formatPercent(roi.win_rate),
+          note: isArabic ? "نسبة الإغلاق" : "Close ratio",
+        },
+        {
+          label: isArabic ? "القيمة الإجمالية" : "Total value",
+          value: formatCurrency(roi.total_value),
+          note: isArabic ? "القيمة التراكمية" : "Pipeline + realized",
+        },
+      ];
+
+  return `
+    <div class="source-stat-strip analytics-summary-strip">
+      ${cards
+        .map(
+          (card) => `
+            <div class="stat-card analytics-summary-card">
+              <span>${card.label}</span>
+              <strong>${card.value}</strong>
+              <small>${card.note}</small>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function renderTrendRow(series, metricKey, label, tone = "", period = "daily") {
@@ -1490,16 +1589,22 @@ function renderSourceAnalyticsPanel(source, { compact = false } = {}) {
   if (!analytics) {
     return renderEmptyState();
   }
+  const sourceClass = getSourceClassName(source);
+  const latestActivity = formatAnalyticsActivity(analytics.latest_activity);
 
   return `
-    <article class="panel analytics-panel ${compact ? "compact" : ""}">
+    <article class="panel analytics-panel ${compact ? "compact" : ""} ${sourceClass}">
       <div class="panel-head">
         <div>
           <p class="panel-label">${copy().meta.lang === "ar" ? "تحليل القناة" : "Source analytics"}</p>
           <h3>${displayChannel(source)}</h3>
         </div>
-        <span class="pill">${formatPercent(analytics.roi.win_rate)}</span>
+        <div class="panel-head-meta">
+          ${latestActivity ? `<span class="pill">${copy().meta.lang === "ar" ? "آخر نشاط" : "Latest activity"} ${latestActivity}</span>` : ""}
+          <span class="pill">${formatPercent(analytics.roi.win_rate)}</span>
+        </div>
       </div>
+      ${renderAnalyticsSummaryStrip(source, { compact })}
       <div class="analytics-layout ${compact ? "compact" : ""}">
         ${renderTrendPanel(source, { compact })}
         ${renderRoiPanel(source)}
