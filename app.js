@@ -143,6 +143,7 @@ const state = {
   data: createSeedData(),
   activeScreen: "analysis",
   activeSource: "all",
+  activeAnalysisSource: "WhatsApp",
   filters: {
     sector: "all",
     stage: "all",
@@ -2058,6 +2059,13 @@ function attachActionListeners() {
       }
     });
   }));
+
+  elements.content.querySelectorAll("[data-analysis-source]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeAnalysisSource = button.dataset.analysisSource;
+      renderApp();
+    });
+  });
 }
 
 function renderNotice() {
@@ -2606,9 +2614,43 @@ function renderLeadCommandRow(lead, options = {}) {
   `;
 }
 
+function renderSourceNavigator(sourceRows) {
+  const activeSource = sourceRows.some(({ source }) => source === state.activeAnalysisSource)
+    ? state.activeAnalysisSource
+    : sourceRows[0]?.source || resolveActiveSource();
+
+  return `
+    <div class="source-navigator">
+      <div class="navigator-tabs">
+        ${sourceRows
+          .map(({ source, metrics: sourceMetrics }) => {
+            const analytics = getSourceAnalytics(source);
+            const isActive = activeSource === source;
+            return `
+              <button class="nav-tab ${isActive ? "active" : ""}" type="button" data-analysis-source="${source}">
+                <div class="nav-tab-head">
+                  <span class="nav-tab-icon">${displayChannel(source)}</span>
+                  ${renderTargetStatusBadge(sourceMetrics.targetStatus)}
+                </div>
+                <div class="nav-tab-meta">
+                  <strong>${formatPercent(analytics?.roi?.win_rate || 0)}</strong>
+                  <span>${sourceMetrics.respondedToday} / ${sourceMetrics.dailyTarget} • ${copy().meta.lang === "ar" ? "إنجاز" : "done"}</span>
+                </div>
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderAnalysisScreen() {
   const metrics = getAnalysisMetrics();
   const sourceRows = getSourcePriorityRows();
+  const activeAnalysisSource = sourceRows.some(({ source }) => source === state.activeAnalysisSource)
+    ? state.activeAnalysisSource
+    : sourceRows[0]?.source || resolveActiveSource();
   const targetWarnings = getTargetWarningRows();
   const untouchedAlerts = getUntouchedAlertRows();
   const followUpAlerts = getFollowUpAlertRows();
@@ -2617,7 +2659,7 @@ function renderAnalysisScreen() {
   setScreenActions("");
 
   return `
-    <section class="command-deck">
+    <section class="command-deck analysis-high-density">
       <section class="top-strip metrics-strip metrics-grid-8">
         ${renderKpiCell(copy().meta.lang === "ar" ? "إشارات اليوم" : "Signals today", metrics.newToday, "primary")}
         ${renderKpiCell(copy().meta.lang === "ar" ? "أول تواصل" : "First touch", metrics.firstTouchesDoneToday)}
@@ -2629,85 +2671,15 @@ function renderAnalysisScreen() {
         ${renderKpiCell(copy().meta.lang === "ar" ? "المتبقي" : "Remaining", metrics.remainingToTarget, "target")}
       </section>
 
-
-      <section class="command-zone">
-        <div class="command-zone-head">
-          <div>
-            <p class="panel-label">${copy().meta.lang === "ar" ? "مركز القرار" : "Command Zone"}</p>
-            <h2>${copy().meta.lang === "ar" ? "حركة الإيراد التالية" : "Next Revenue Moves"}</h2>
-            <p class="zone-copy">${
-              copy().meta.lang === "ar"
-                ? "صفوف تنفيذ مباشرة: الشركة، الإشارة، الخطوة التالية، ثم تنفيذ فوري."
-                : "Direct execution rows: company, signal, next move, then immediate action."
-            }</p>
-          </div>
-          <div class="command-zone-stats">
-            <div><span>${copy().meta.lang === "ar" ? "القنوات النشطة" : "Active sources"}</span><strong>${sourceRows.length}</strong></div>
-            <div><span>${copy().meta.lang === "ar" ? "صف اليوم" : "Queue size"}</span><strong>${actionQueue.length}</strong></div>
-          </div>
-        </div>
-        <div class="command-zone-list">
-          ${actionQueue.length ? actionQueue.map(({ lead }) => renderLeadCommandRow(lead, { preferConvert: true })).join("") : renderEmptyState()}
-        </div>
-      </section>
-
-      <section class="analysis-analytics-section">
-        <div class="command-zone-head">
-          <div>
-            <p class="panel-label">${copy().meta.lang === "ar" ? "تحليلات القنوات" : "Source analytics"}</p>
-            <h2>${copy().meta.lang === "ar" ? "Trend / ROI / SLA" : "Trend / ROI / SLA"}</h2>
-            <p class="zone-copy">${
-              copy().meta.lang === "ar"
-                ? "كل مصدر يوضح أين ينمو، أين يتسرب، وأي إجراء هو التالي."
-                : "Each source shows where it is growing, where it leaks, and what action comes next."
-            }</p>
-          </div>
-        </div>
-        <div class="analysis-analytics-grid">
-          ${sourceRows.length ? sourceRows.map(({ source }) => renderSourceAnalyticsPanel(source, { compact: true })).join("") : renderEmptyState()}
-        </div>
-      </section>
-
-      <section class="operational-grid">
-        <article class="intent-section">
-          <div class="intent-head">
-            <div>
-              <p class="panel-label">${copy().meta.lang === "ar" ? "اتجاه الصيد" : "Directional Focus"}</p>
-              <h3>${copy().meta.lang === "ar" ? "أولوية القنوات" : "Source Priority"}</h3>
-            </div>
-          </div>
-          <div class="intent-list">
-            ${sourceRows
-              .map(
-                ({ source, metrics: sourceMetrics }) => `
-                  <button class="system-row" type="button" data-source-tab="${source}">
-                    <div class="system-row-main">
-                      <strong>${displayChannel(source)}</strong>
-                      <div class="meta-row">${
-                        copy().meta.lang === "ar"
-                          ? `${sourceMetrics.followUpDueToday} متابعة اليوم • ${sourceMetrics.overdueFollowups} متأخرة • ${sourceMetrics.untouchedCapturedToday} بلا لمس`
-                          : `${sourceMetrics.followUpDueToday} due today • ${sourceMetrics.overdueFollowups} overdue • ${sourceMetrics.untouchedCapturedToday} untouched`
-                      }</div>
-                      <div class="meta-row source-action-copy">${getSourceActionPrompt(source, sourceMetrics)}</div>
-                    </div>
-                    <div class="system-row-side">
-                      ${renderTargetStatusBadge(sourceMetrics.targetStatus)}
-                    </div>
-                  </button>
-                `,
-              )
-              .join("")}
-          </div>
-        </article>
-
-        <article class="intent-section faded">
+      <section class="operational-alerts-strip">
+        <article class="intent-section elevated">
           <div class="intent-head">
             <div>
               <p class="panel-label">${copy().meta.lang === "ar" ? "ضغط التنفيذ" : "Execution Pressure"}</p>
-              <h3>${copy().meta.lang === "ar" ? "أين نتحرك الآن" : "Where to Move Now"}</h3>
+              <h3>${copy().meta.lang === "ar" ? "أولوية التحرك" : "Move Priority"}</h3>
             </div>
           </div>
-          <div class="intent-list">
+          <div class="system-row-grid">
             ${
               (followUpAlerts.length || untouchedAlerts.length || targetWarnings.length)
                 ? [
@@ -2715,47 +2687,85 @@ function renderAnalysisScreen() {
                     ...untouchedAlerts.filter(({ source }) => !followUpAlerts.some((item) => item.source === source)),
                     ...targetWarnings.filter(({ source }) => !followUpAlerts.some((item) => item.source === source) && !untouchedAlerts.some((item) => item.source === source)),
                   ]
+                    .slice(0, 4)
                     .map(
                       ({ source, metrics: sourceMetrics }) => `
-                        <button class="system-row warning" type="button" data-source-tab="${source}">
-                          <div class="system-row-main">
-                            <strong>${displayChannel(source)}</strong>
-                            <div class="meta-row">
-                              ${getSourceExecutionAlert(source, sourceMetrics) || getSourceActionPrompt(source, sourceMetrics)}
-                            </div>
-                          </div>
-                          <div class="system-row-side">
-                            <span class="system-number">${sourceMetrics.overdueFollowups || sourceMetrics.followUpDueToday || sourceMetrics.untouchedCapturedToday || sourceMetrics.remainingToTarget}</span>
-                            <span class="system-label">${copy().meta.lang === "ar" ? (sourceMetrics.overdueFollowups ? "متأخرة" : sourceMetrics.followUpDueToday ? "اليوم" : sourceMetrics.untouchedCapturedToday ? "تحتاج لمس" : "متبقٍ") : (sourceMetrics.overdueFollowups ? "overdue" : sourceMetrics.followUpDueToday ? "today" : sourceMetrics.untouchedCapturedToday ? "untouched" : "left")}</span>
-                          </div>
+                        <button class="system-tile warning" type="button" data-analysis-source="${source}">
+                          <strong>${displayChannel(source)}</strong>
+                          <span>${getSourceExecutionAlert(source, sourceMetrics) || getSourceActionPrompt(source, sourceMetrics)}</span>
                         </button>
                       `,
                     )
                     .join("")
-                : renderEmptyState()
+                : `<div class="system-tile success"><strong>${copy().meta.lang === "ar" ? "الوضع مستقر" : "Status Clear"}</strong><span>${copy().meta.lang === "ar" ? "لا توجد ضغوط تنفيذ حالية." : "No immediate execution pressure."}</span></div>`
             }
           </div>
         </article>
 
-        <article class="bottom-zone">
+        <article class="intent-section elevated">
           <div class="intent-head">
             <div>
-              <p class="panel-label">${copy().meta.lang === "ar" ? "نظام التشغيل" : "Operating Cadence"}</p>
-              <h3>${copy().meta.lang === "ar" ? "قواعد قرار سريعة" : "Fast Decision Rules"}</h3>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "توزيع القنوات" : "Source Priority"}</p>
+              <h3>${copy().meta.lang === "ar" ? "أولوية الصيد" : "Hunt Priority"}</h3>
             </div>
           </div>
+          <div class="system-row-grid">
+            ${sourceRows
+              .slice(0, 4)
+              .map(
+                ({ source, metrics: sourceMetrics }) => `
+                  <button class="system-tile" type="button" data-analysis-source="${source}">
+                    <strong>${displayChannel(source)}</strong>
+                    <span>${sourceMetrics.followUpDueToday} follow-ups • ${sourceMetrics.untouchedCapturedToday} untouched</span>
+                  </button>
+                `,
+              )
+              .join("")}
+          </div>
+        </article>
+      </section>
+
+      <section class="command-zone">
+        <div class="command-zone-head">
+          <div>
+            <p class="panel-label">${copy().meta.lang === "ar" ? "مركز القرار" : "Command Zone"}</p>
+            <h2>${copy().meta.lang === "ar" ? "حركة الإيراد التالية" : "Next Revenue Moves"}</h2>
+          </div>
+          <div class="command-zone-stats">
+            <div><span>${copy().meta.lang === "ar" ? "صف اليوم" : "Queue"}</span><strong>${actionQueue.length}</strong></div>
+          </div>
+        </div>
+        <div class="command-zone-list">
+          ${actionQueue.length ? actionQueue.map(({ lead }) => renderLeadCommandRow(lead, { preferConvert: true })).join("") : renderEmptyState()}
+        </div>
+      </section>
+
+      <section class="analysis-analytics-section contextual-analytics">
+        <div class="analysis-focus-header">
+           <div class="command-zone-head">
+            <div>
+              <p class="panel-label">${copy().meta.lang === "ar" ? "تحليلات القناة المتعمقة" : "Source Deep Dive"}</p>
+              <h2>${displayChannel(activeAnalysisSource)} ${copy().meta.lang === "ar" ? "التوجه والأداء" : "Trend & ROI"}</h2>
+            </div>
+          </div>
+          ${renderSourceNavigator(sourceRows)}
+        </div>
+
+        <div class="analysis-analytics-grid focus-grid">
+          ${renderSourceAnalyticsPanel(activeAnalysisSource, { compact: false })}
+        </div>
+      </section>
+
+      <section class="bottom-zone-strip">
+         <article class="bottom-zone">
           <div class="rule-grid">
             <div class="rule-tile">
-              <span>${copy().meta.lang === "ar" ? "الحركة الأولى" : "First move"}</span>
-              <strong>${copy().meta.lang === "ar" ? "ابدأ بالقنوات ذات الجاهزية الأعلى، لا بالأكثر ضجيجًا." : "Start with the most conversion-ready source, not the noisiest one."}</strong>
+              <span>${copy().meta.lang === "ar" ? "المبدأ" : "Heuristic"}</span>
+              <strong>${copy().meta.lang === "ar" ? "ابدأ بالقنوات ذات الجاهزية الأعلى." : "Start with the most conversion-ready source."}</strong>
             </div>
             <div class="rule-tile">
-              <span>${copy().meta.lang === "ar" ? "معيار التنفيذ" : "Execution test"}</span>
-              <strong>${copy().meta.lang === "ar" ? "إذا لم توجد خطوة تالية، فالسجل متوقف حتى لو بدا نشطًا." : "If there is no next step, the record is stalled even if it looks active."}</strong>
-            </div>
-            <div class="rule-tile">
-              <span>${copy().meta.lang === "ar" ? "ضغط اليوم" : "Daily push"}</span>
-              <strong>${copy().meta.lang === "ar" ? "القناة المتأخرة عن هدفها اليومي يجب أن تتحرك قبل التوسّع في أعمال أقل إلحاحًا." : "Any source behind its daily target should move before expanding into lower-pressure work."}</strong>
+              <span>${copy().meta.lang === "ar" ? "التنفيذ" : "Execution"}</span>
+              <strong>${copy().meta.lang === "ar" ? "إذا لم توجد خطوة تالية، فالسجل متوقف." : "No next step = stalled record."}</strong>
             </div>
           </div>
         </article>
@@ -2763,6 +2773,7 @@ function renderAnalysisScreen() {
     </section>
   `;
 }
+
 
 function renderAllLeadCard(lead) {
   return renderLeadCommandRow(lead, {
