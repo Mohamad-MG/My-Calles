@@ -3,7 +3,7 @@ import { mkdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { StateStore } from "./backend/state-store.mjs";
+import { V2StateStore } from "./backend/v2-state-store.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,7 +57,11 @@ function getSessionId(request) {
 
 async function serveStaticFile(response, rootDir, pathname) {
   const cleanPath = decodeURIComponent(pathname.split("?")[0]);
-  const relativePath = cleanPath === "/" ? "/index.html" : cleanPath;
+  const rewrittenPath = cleanPath.replace(
+    /^\/(en|ar)\/v2\/opportunities\/[^/]+\/?$/,
+    "/$1/v2/opportunities/index.html",
+  );
+  const relativePath = rewrittenPath === "/" ? "/index.html" : rewrittenPath;
   const resolvedPath = path.normalize(path.join(rootDir, relativePath));
 
   if (!resolvedPath.startsWith(rootDir)) {
@@ -91,7 +95,7 @@ async function serveStaticFile(response, rootDir, pathname) {
 }
 
 function createAppServer({ rootDir = __dirname, dataDir = path.join(__dirname, "data") } = {}) {
-  const store = new StateStore({ dataDir });
+  const v2Store = new V2StateStore({ dataDir });
 
   const server = createServer(async (request, response) => {
     const startedAt = performance.now();
@@ -103,92 +107,82 @@ function createAppServer({ rootDir = __dirname, dataDir = path.join(__dirname, "
     let conflictDetected = false;
     let kind = "read";
     let errorMessage = null;
+    const targetStore = v2Store;
 
     try {
-      if (request.method === "GET" && url.pathname === "/state") {
+      if (request.method === "GET" && url.pathname === "/v2/state") {
         kind = "read";
-        const state = await store.getState();
+        const state = await v2Store.getState();
         jsonResponseWithHeaders(response, 200, state, {
-          "X-State-Version": String(store.getVersion()),
+          "X-State-Version": String(v2Store.getVersion()),
           "X-Session-Id": String(sessionId),
         });
         return;
       }
 
-      if (request.method === "GET" && url.pathname === "/debug/observability") {
-        const payload = store.getObservabilitySnapshot();
-        jsonResponse(response, 200, payload);
+      if (request.method === "GET" && url.pathname === "/v2/debug/observability") {
+        jsonResponse(response, 200, v2Store.getObservabilitySnapshot());
         return;
       }
 
-      if (request.method === "POST" && url.pathname === "/state/restore-seed") {
+      if (request.method === "POST" && url.pathname === "/v2/state/restore-seed") {
         kind = "mutation";
-        const state = await store.restoreSeed(actor, "restore-seed");
+        const state = await v2Store.restoreSeed(actor, "restore-seed");
         jsonResponseWithHeaders(response, 200, state, {
-          "X-State-Version": String(store.getVersion()),
+          "X-State-Version": String(v2Store.getVersion()),
         });
         return;
       }
 
-      if (request.method === "POST" && url.pathname === "/state/reset-shared") {
-        kind = "mutation";
-        const state = await store.restoreSeed(actor, "reset-shared");
-        jsonResponseWithHeaders(response, 200, state, {
-          "X-State-Version": String(store.getVersion()),
-        });
-        return;
-      }
-
-      if (request.method === "POST" && url.pathname === "/sectors") {
+      if (request.method === "POST" && url.pathname === "/v2/conversions/qualified-leads") {
         kind = "mutation";
         const payload = await readJsonBody(request);
-        conflictDetected = knownVersion > 0 && knownVersion !== store.getVersion();
-        const result = await store.createEntity("sectors", payload, actor);
-        statusCode = result.created ? 201 : 200;
-        jsonResponseWithHeaders(response, statusCode, result.state, {
-          "X-State-Version": String(store.getVersion()),
+        conflictDetected = knownVersion > 0 && knownVersion !== v2Store.getVersion();
+        const state = await v2Store.convertQualifiedLead(payload, actor);
+        jsonResponseWithHeaders(response, 201, state, {
+          "X-State-Version": String(v2Store.getVersion()),
           "X-Conflict-Detected": conflictDetected ? "1" : "0",
         });
         return;
       }
 
-      if (request.method === "POST" && url.pathname === "/leads") {
+      if (request.method === "POST" && url.pathname === "/v2/opportunities") {
         kind = "mutation";
         const payload = await readJsonBody(request);
-        conflictDetected = knownVersion > 0 && knownVersion !== store.getVersion();
-        const result = await store.createEntity("leads", payload, actor);
+        conflictDetected = knownVersion > 0 && knownVersion !== v2Store.getVersion();
+        const state = await v2Store.createOpportunityFromQualifiedLead(payload, actor);
+        jsonResponseWithHeaders(response, 201, state, {
+          "X-State-Version": String(v2Store.getVersion()),
+          "X-Conflict-Detected": conflictDetected ? "1" : "0",
+        });
+        return;
+      }
+
+      if (request.method === "POST" && /^\/v2\/[^/]+$/.test(url.pathname) && url.pathname !== "/v2/opportunities") {
+        kind = "mutation";
+        const [, , entity] = url.pathname.split("/");
+        const payload = await readJsonBody(request);
+        conflictDetected = knownVersion > 0 && knownVersion !== v2Store.getVersion();
+        const result = await v2Store.createEntity(entity, payload, actor);
         statusCode = result.created ? 201 : 200;
         jsonResponseWithHeaders(response, statusCode, result.state, {
-          "X-State-Version": String(store.getVersion()),
+          "X-State-Version": String(v2Store.getVersion()),
           "X-Conflict-Detected": conflictDetected ? "1" : "0",
           "X-Duplicate-Detected": result.duplicate ? "1" : "0",
         });
         return;
       }
 
-      if (request.method === "POST" && url.pathname === "/opportunities") {
-        kind = "mutation";
-        const payload = await readJsonBody(request);
-        conflictDetected = knownVersion > 0 && knownVersion !== store.getVersion();
-        const result = await store.createEntity("opportunities", payload, actor);
-        statusCode = result.created ? 201 : 200;
-        jsonResponseWithHeaders(response, statusCode, result.state, {
-          "X-State-Version": String(store.getVersion()),
-          "X-Conflict-Detected": conflictDetected ? "1" : "0",
-        });
-        return;
-      }
-
       if (request.method === "PATCH") {
-        const match = url.pathname.match(/^\/([^/]+)\/([^/]+)$/);
-        if (match) {
+        const v2Match = url.pathname.match(/^\/v2\/([^/]+)\/([^/]+)$/);
+        if (v2Match) {
           kind = "mutation";
-          const [, entity, id] = match;
+          const [, entity, id] = v2Match;
           const payload = await readJsonBody(request);
-          conflictDetected = knownVersion > 0 && knownVersion !== store.getVersion();
-          const state = await store.patchEntity(entity, id, payload, actor);
+          conflictDetected = knownVersion > 0 && knownVersion !== v2Store.getVersion();
+          const state = await v2Store.patchEntity(entity, id, payload, actor);
           jsonResponseWithHeaders(response, 200, state, {
-            "X-State-Version": String(store.getVersion()),
+            "X-State-Version": String(v2Store.getVersion()),
             "X-Conflict-Detected": conflictDetected ? "1" : "0",
           });
           return;
@@ -204,13 +198,13 @@ function createAppServer({ rootDir = __dirname, dataDir = path.join(__dirname, "
       const latencyMs = Number((performance.now() - startedAt).toFixed(2));
       const level = statusCode >= 400 ? "error" : conflictDetected ? "warning" : "info";
       try {
-        await store.recordEvent({
+        await targetStore.recordEvent({
           route: url.pathname,
           method: request.method,
           actor,
           session_id: sessionId,
           known_version: knownVersion,
-          current_version: store.getVersion(),
+          current_version: targetStore.getVersion(),
           conflict_detected: conflictDetected,
           latency_ms: latencyMs,
           status_code: statusCode,
@@ -232,7 +226,7 @@ function createAppServer({ rootDir = __dirname, dataDir = path.join(__dirname, "
   return {
     server,
     start: async (port = DEFAULT_PORT) => {
-      await store.init();
+      await v2Store.init();
       await mkdir(dataDir, { recursive: true });
       return new Promise((resolve) => {
         server.listen(port, () => resolve(server));

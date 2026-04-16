@@ -1,0 +1,147 @@
+import { TRANSITION_MAPS } from "../domain.mjs";
+import {
+  escapeHtml,
+  formatShortDate,
+  getTodayInputValue,
+  localizeValue,
+  renderBadge,
+  renderEmptyState,
+  renderKeyValue,
+  renderSectionHeading,
+} from "../shared-ui.mjs";
+
+const ENTITY = "google_rank_tasks";
+
+function selectGoogleRankTasks(state) {
+  return [...(state.data.google_rank_tasks || [])].sort((left, right) =>
+    String(left.next_step_date || "").localeCompare(String(right.next_step_date || "")),
+  );
+}
+
+function getAllowedTransitions(record) {
+  return TRANSITION_MAPS[ENTITY][record.status] || [];
+}
+
+function renderGoogleRankOps(copy, items) {
+  const statuses = Object.keys(TRANSITION_MAPS[ENTITY]);
+  return `
+    <article class="v2-panel">
+      ${renderSectionHeading(copy.modules.google.rankOps, copy.modules.google.rankOps)}
+      <form class="v2-create-form" data-create-entity="${ENTITY}">
+        <div class="v2-form-grid">
+          <label><span>${escapeHtml(copy.forms.keyword)}</span><input name="keyword" required /></label>
+          <label><span>${escapeHtml(copy.forms.page)}</span><input name="page" required /></label>
+          <label><span>${escapeHtml(copy.forms.searchIntent)}</span><input name="search_intent" required /></label>
+          <label><span>${escapeHtml(copy.forms.rankTaskType)}</span><input name="rank_task_type" required /></label>
+          <label class="wide"><span>${escapeHtml(copy.chrome.summary)}</span><input name="summary" required /></label>
+          <label class="wide"><span>${escapeHtml(copy.chrome.nextStep)}</span><input name="next_step" required /></label>
+          <label><span>${escapeHtml(copy.chrome.nextStepDate)}</span><input type="date" name="next_step_date" value="${getTodayInputValue()}" required /></label>
+        </div>
+        <input type="hidden" name="channel" value="Google" />
+        <input type="hidden" name="status" value="Backlog" />
+        <input type="hidden" name="task_summary" value="" />
+        <div class="v2-form-actions"><button class="v2-button primary" type="submit">${escapeHtml(copy.chrome.create)}</button></div>
+      </form>
+      <div class="v2-board compact-board">
+        ${statuses
+          .map((status) => {
+            const columnItems = items.filter((item) => item.status === status);
+            return `
+              <article class="v2-panel v2-column">
+                ${renderSectionHeading(copy.chrome.status, localizeValue(copy, status), renderBadge(String(columnItems.length), "muted"))}
+                <div class="v2-column-stack">
+                  ${
+                    columnItems.length
+                      ? columnItems
+                          .map(
+                            (record) => {
+                              const primaryTransition = getAllowedTransitions(record)[0] || "";
+                              const footer = record.status === "Opportunity Found" && !record.converted_qualified_lead_id
+                                ? `<div class="v2-card-actions"><div class="v2-inline-note">${escapeHtml(copy.chrome.readyForHandoff)}</div></div>`
+                                : record.converted_qualified_lead_id
+                                  ? `<div class="v2-card-actions"><div class="v2-inline-note">${escapeHtml(copy.chrome.alreadyConverted)}: ${escapeHtml(record.converted_qualified_lead_id)}</div></div>`
+                                  : primaryTransition
+                                    ? `<div class="v2-card-actions"><button class="v2-button primary" type="button" data-transition="${ENTITY}:${record.id}:${primaryTransition}">${escapeHtml(copy.chrome.doNext)}: ${escapeHtml(localizeValue(copy, primaryTransition))}</button></div>`
+                                    : "";
+                              return `
+                              <article class="v2-record-card">
+                                <button class="v2-card-main" type="button" data-open-drawer="${ENTITY}:${record.id}">
+                                  <div class="v2-card-head">
+                                    <div>
+                                      <strong>${escapeHtml(record.keyword)}</strong>
+                                      <p>${escapeHtml(record.page)} • ${escapeHtml(record.rank_task_type)}</p>
+                                    </div>
+                                    ${renderBadge(localizeValue(copy, record.status))}
+                                  </div>
+                                  <p class="v2-card-summary">${escapeHtml(record.summary)}</p>
+                                  <div class="v2-card-meta">${renderBadge(formatShortDate(record.next_step_date, copy.meta.lang), "outline")}</div>
+                                </button>
+                                ${footer}
+                              </article>
+                            `;
+                            },
+                          )
+                          .join("")
+                      : renderEmptyState(copy)
+                  }
+                </div>
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderGoogleRankDrawer(app, record) {
+  const { copy } = app;
+  return `
+    <div class="v2-drawer-stack">
+      ${renderSectionHeading(copy.modules.google.rankOps, record.keyword)}
+      <div class="v2-detail-grid">
+        ${renderKeyValue(copy.forms.page, record.page)}
+        ${renderKeyValue(copy.forms.searchIntent, record.search_intent)}
+        ${renderKeyValue(copy.forms.rankTaskType, record.rank_task_type)}
+        ${renderKeyValue(copy.chrome.nextStepDate, formatShortDate(record.next_step_date, copy.meta.lang))}
+      </div>
+      <form data-edit-record="${ENTITY}:${record.id}">
+        <div class="v2-form-grid">
+          <label class="wide"><span>${escapeHtml(copy.forms.taskSummary)}</span><input name="task_summary" value="${escapeHtml(record.task_summary)}" /></label>
+          <label class="wide"><span>${escapeHtml(copy.chrome.summary)}</span><textarea name="summary">${escapeHtml(record.summary)}</textarea></label>
+          <label class="wide"><span>${escapeHtml(copy.forms.opportunityNote)}</span><input name="opportunity_note" value="${escapeHtml(record.opportunity_note)}" /></label>
+          <label class="wide"><span>${escapeHtml(copy.chrome.nextStep)}</span><input name="next_step" value="${escapeHtml(record.next_step)}" /></label>
+          <label><span>${escapeHtml(copy.chrome.nextStepDate)}</span><input type="date" name="next_step_date" value="${escapeHtml(record.next_step_date)}" /></label>
+          <label class="wide"><span>${escapeHtml(copy.chrome.notes)}</span><textarea name="notes">${escapeHtml(record.notes || "")}</textarea></label>
+        </div>
+        <div class="v2-form-actions"><button class="v2-button primary" type="submit">${escapeHtml(copy.chrome.save)}</button></div>
+      </form>
+      <div class="v2-action-row">
+        ${getAllowedTransitions(record)
+          .map(
+            (status) => `<button class="v2-button ghost" type="button" data-transition="${ENTITY}:${record.id}:${status}">${escapeHtml(localizeValue(copy, status))}</button>`,
+          )
+          .join("")}
+      </div>
+      ${
+        record.status === "Opportunity Found" && !record.converted_qualified_lead_id
+          ? `
+            <form data-convert-source="${ENTITY}:${record.id}">
+              <div class="v2-form-grid">
+                <label class="wide"><span>${escapeHtml(copy.forms.painSummary)}</span><input name="pain_summary" value="${escapeHtml(record.opportunity_note || record.summary)}" /></label>
+                <label class="wide"><span>${escapeHtml(copy.forms.qualificationNote)}</span><textarea name="qualification_note">${escapeHtml(record.summary || "")}</textarea></label>
+                <label><span>${escapeHtml(copy.chrome.service)}</span><select name="recommended_service"><option value="mycalls">${escapeHtml(copy.values.mycalls)}</option><option value="nicechat">${escapeHtml(copy.values.nicechat)}</option><option value="both">${escapeHtml(copy.values.both)}</option></select></label>
+                <label><span>${escapeHtml(copy.chrome.confidence)}</span><select name="recommended_service_confidence"><option value="high">${escapeHtml(copy.values.high)}</option><option value="medium" selected>${escapeHtml(copy.values.medium)}</option><option value="low">${escapeHtml(copy.values.low)}</option></select></label>
+              </div>
+              <div class="v2-form-actions"><button class="v2-button primary" type="submit">${escapeHtml(copy.chrome.convert)}</button></div>
+            </form>
+          `
+          : record.converted_qualified_lead_id
+            ? `<div class="v2-inline-note">${escapeHtml(copy.chrome.alreadyConverted)}: ${escapeHtml(record.converted_qualified_lead_id)}</div>`
+            : ""
+      }
+    </div>
+  `;
+}
+
+export { ENTITY as GOOGLE_RANK_ENTITY, renderGoogleRankDrawer, renderGoogleRankOps, selectGoogleRankTasks };

@@ -1,14 +1,14 @@
-# MyCalls Operational Dashboard
+# MyCalls V2
 
-Source-first admin dashboard plus lightweight shared backend for running the MyCalls workflow as one shared operational board.
+Channel-first operating system for daily lead generation and qualification.
 
-Current release candidate UX:
-- Source tabs as the primary navigation
-- Extraction panel for quick lead capture inside the active source
-- Inbox workflow grouped by source-first stages
-- Progression rail that keeps lead-to-opportunity continuity visible
-- Shared persistent state, audit logging, and validation observability
-- Source analytics now include trend charts, ROI summaries, SLA timers, and next-best-action guidance per source
+Current product shape:
+- `Home` as a strict decision screen
+- Dedicated workspaces for `WhatsApp`, `LinkedIn`, and `Google`
+- `Google` split internally into `Inbound` and `Rank Ops`
+- Shared converted handoff queue only for qualified records
+- Full-screen downstream opportunity detail
+- Separate V2 persistence, audit trail, and observability
 
 ## Local Run
 
@@ -23,74 +23,57 @@ npm start
 Then open:
 
 ```text
-http://localhost:4173/en/
+http://localhost:4173/en/v2/
 ```
 
 The server provides:
-- Static dashboard pages
-- Shared persistent dashboard state
+- Static V2 pages
+- Isolated V2 shared state
 - Audit logging for every mutation
 - Lightweight observability for validation
-- `/state` now includes analytics rollups used by the source trend and ROI panels
 
 State is stored under `data/` and is shared across sessions.
 
-## Source-First Workflow
+## V2 Route Surface
 
-The dashboard is now designed for a single `Admin` operator.
-
-Each source tab is a complete execution surface:
-- Capture a new lead directly into the active source
-- Manage the lead inside source inbox buckets
-- Move ready leads into opportunities without leaving the same source context
-
-Display-level inbox buckets:
-- `New`
-- `Needs Extraction`
-- `Needs Reply`
-- `Needs Qualification`
-- `Ready for Handoff`
-- `Closed / Disqualified`
-
-Business rules preserved in this release candidate:
-- No automatic sector activation
-- No duplicate opportunity from the same `origin_lead_id`
-- Funnel logic remains truthful and avoids misleading aggregation
+- `GET /en/v2/`
+- `GET /en/v2/whatsapp/`
+- `GET /en/v2/linkedin/`
+- `GET /en/v2/google/`
+- `GET /en/v2/handoff/`
+- `GET /en/v2/opportunities/:id/`
+- Arabic parity under `/ar/v2/...`
 
 ## API Surface
 
-- `GET /state`
-- `PATCH /:entity/:id`
-- `POST /sectors`
-- `POST /leads`
-- `POST /opportunities`
-- `POST /state/restore-seed`
-- `POST /state/reset-shared`
-- `GET /debug/observability`
+- `GET /v2/state`
+- `PATCH /v2/:entity/:id`
+- `POST /v2/:entity`
+- `POST /v2/conversions/qualified-leads`
+- `POST /v2/opportunities`
+- `POST /v2/state/restore-seed`
+- `GET /v2/debug/observability`
 
-## Validation Mode
+## Core Guarantees
 
-For real-world usage validation, the system now monitors:
-- Shared state sync across sessions
-- Last-write-wins conflicts
-- API latency and failures
-- Audit trail completeness for each mutation
-
-Optional lightweight debug visibility:
-- Open the dashboard with `?debug` to see validation logs in the browser console
-- Check `GET /debug/observability` for a simple runtime summary
+- Each channel owns its own selectors, statuses, transitions, and forms
+- No shared generic source workflow engine
+- Qualified conversion creates a new `qualified_lead` while preserving source history
+- Opportunities can only be created from handoff-ready qualified leads
+- Duplicate opportunity creation is blocked
+- V1 APIs and V1 frontend are removed
 
 ## Why `file://` Is Unsupported
 
-The dashboard boots through ES modules and now depends on the shared backend API. Modern browsers block module loading from `file://`, and the API is unavailable there, so the app intentionally shows a support/fallback message in that mode.
+The V2 app boots through ES modules and depends on the shared backend API. Modern browsers block module loading from `file://`, and the API is unavailable there.
 
 ## Deployment Note
 
-This project is no longer a GitHub Pages-only static site. It requires the Node server so the dashboard can use shared state, audit logging, and validation observability.
+This project requires the Node server so the dashboard can use shared state, audit logging, and validation observability.
 
 Deploy through GitHub Actions only by pushing `main`.
 
 ## Supported Runtime Environments
 
-- Supported: the bundled Node server at `http://localhost:4173`
+- Supported: the bundled Node server at `http://localhost:4173/en/v2/`
 - Unsupported: direct `file://.../index.html`

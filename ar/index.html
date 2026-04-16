@@ -3,85 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>لوحة تشغيل ماي كولز</title>
-    <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="../styles.css" />
+    <meta http-equiv="refresh" content="0;url=./v2/" />
+    <title>ماي كولز V2</title>
   </head>
   <body>
-    <div class="app-shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark" id="brand-mark">مك</div>
-          <div>
-            <p class="eyebrow" id="brand-eyebrow">محرك الإيراد</p>
-            <h1 id="product-name">ماي كولز</h1>
-          </div>
-        </div>
-
-        <div class="sidebar-section">
-          <p class="sidebar-section-label">التنقل</p>
-          <nav class="nav" id="main-nav"></nav>
-        </div>
-
-        <section class="sidebar-panel system-panel">
-          <div class="sidebar-panel-head">
-            <p class="panel-label" id="sidebar-weekly-label">تركيز الأسبوع</p>
-            <span class="sidebar-panel-tag">LIVE</span>
-          </div>
-          <div id="sidebar-weekly-focus"></div>
-        </section>
-
-        <section class="sidebar-panel system-panel">
-          <div class="sidebar-panel-head">
-            <p class="panel-label" id="sidebar-rules-label">قواعد التشغيل</p>
-          </div>
-          <ul class="rules-list" id="rules-list"></ul>
-        </section>
-      </aside>
-
-      <main class="main">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow" id="topbar-eyebrow">لوحة تشغيلية</p>
-            <h2 id="screen-title">التركيز التنفيذي</h2>
-          </div>
-          <div class="topbar-utility">
-            <div class="topbar-actions" id="screen-actions"></div>
-            <a href="../en/" class="icon-button lang-toggle" title="Switch to English">EN</a>
-          </div>
-        </header>
-
-        <section class="filters" id="global-filters"></section>
-
-        <section class="content" id="screen-content"></section>
-      </main>
-    </div>
-
-    <div class="drawer-backdrop hidden" id="drawer-backdrop"></div>
-    <aside class="drawer hidden" id="drawer">
-      <div class="drawer-header">
-        <div>
-          <p class="eyebrow" id="drawer-kicker">التفاصيل</p>
-          <h3 id="drawer-title">سجل</h3>
-        </div>
-        <button class="icon-button" id="drawer-close" type="button" aria-label="إغلاق اللوحة">
-          ✕
-        </button>
-      </div>
-      <div class="drawer-body" id="drawer-body"></div>
-    </aside>
-
-    <script type="module">
-      import { getLocaleConfig } from "../i18n.mjs";
-      import * as app from "../app.js";
-      try {
-        await app.bootstrapApp({
-          locale: "ar",
-          localeConfig: getLocaleConfig("ar"),
-        });
-      } catch (error) {
-        document.body.innerHTML = `<div style="padding:32px;font-family:sans-serif;direction:rtl"><h1>خطأ</h1><p>${error.message}</p></div>`;
-      }
-    </script>
+    <p>جارٍ التحويل إلى <a href="./v2/">ماي كولز V2</a>...</p>
   </body>
 </html>
