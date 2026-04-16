@@ -5,25 +5,57 @@ function createSessionId() {
   return `session-${Math.random().toString(16).slice(2)}`;
 }
 
-async function fetchV2State({ sessionId }) {
-  const response = await fetch("/state", {
-    headers: {
-      "X-User": "dashboard-web",
-      "X-Session-Id": sessionId,
-    },
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload.error || "Failed to load state.");
+function getRuntimeBasePath() {
+  if (typeof window === "undefined") return "";
+  const match = window.location.pathname.match(/^(.*)\/(en|ar)(?:\/|$)/);
+  return match?.[1] || "";
+}
+
+function withBasePath(path) {
+  const basePath = getRuntimeBasePath();
+  return `${basePath}${path}`;
+}
+
+async function readJson(response, fallbackMessage) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(fallbackMessage);
   }
-  return {
-    payload,
-    version: Number(response.headers.get("X-State-Version") || 0),
+}
+
+async function fetchV2State({ sessionId }) {
+  const headers = {
+    "X-User": "dashboard-web",
+    "X-Session-Id": sessionId,
   };
+
+  try {
+    const response = await fetch(withBasePath("/state"), { headers });
+    const payload = await readJson(response, "Failed to load live state.");
+    if (!response.ok) {
+      throw new Error(payload.error || "Failed to load live state.");
+    }
+    return {
+      payload,
+      version: Number(response.headers.get("X-State-Version") || payload?._meta?.version || 0),
+    };
+  } catch (error) {
+    const fallback = await fetch(withBasePath("/data/dashboard-state.json"), { headers });
+    const payload = await readJson(fallback, error.message || "Failed to load state.");
+    if (!fallback.ok) {
+      throw new Error("Failed to load state.");
+    }
+    return {
+      payload,
+      version: Number(payload?._meta?.version || 0),
+    };
+  }
 }
 
 async function sendV2Request(path, { method = "GET", body, sessionId, version = 0 } = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(withBasePath(path), {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -33,9 +65,14 @@ async function sendV2Request(path, { method = "GET", body, sessionId, version = 
     },
     body: method === "GET" ? undefined : JSON.stringify(body || {}),
   });
-  const payload = await response.json();
+  const payload = await readJson(
+    response,
+    "This deployment is read-only. Run the Node server for live state changes.",
+  );
   if (!response.ok) {
-    throw new Error(payload.error || "Request failed.");
+    throw new Error(
+      payload.error || "This deployment is read-only. Run the Node server for live state changes.",
+    );
   }
   return {
     payload,
@@ -43,4 +80,4 @@ async function sendV2Request(path, { method = "GET", body, sessionId, version = 
   };
 }
 
-export { createSessionId, fetchV2State, sendV2Request };
+export { createSessionId, fetchV2State, getRuntimeBasePath, sendV2Request };

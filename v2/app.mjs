@@ -6,7 +6,7 @@ import { renderGoogleDrawer, renderGoogleShell } from "./modules/google-shell.mj
 import { renderLinkedIn, renderLinkedInDrawer } from "./modules/linkedin.mjs";
 import { getOpportunityById, renderOpportunityDetail } from "./modules/opportunities.mjs";
 import { renderWhatsApp, renderWhatsAppDrawer } from "./modules/whatsapp.mjs";
-import { createSessionId, fetchV2State, sendV2Request } from "./shared-state.mjs";
+import { createSessionId, fetchV2State, getRuntimeBasePath, sendV2Request } from "./shared-state.mjs";
 import { escapeHtml, localizeValue } from "./shared-ui.mjs";
 
 const state = {
@@ -16,6 +16,7 @@ const state = {
   googleTab: "inbound",
   data: null,
   version: 0,
+  basePath: "",
   sessionId: createSessionId(),
   drawer: {
     open: false,
@@ -28,7 +29,7 @@ const state = {
 let elements = null;
 
 function routeFor(screenKey, locale = state.locale, params = {}) {
-  const base = `/${locale}`;
+  const base = `${state.basePath}/${locale}`;
   if (screenKey === "home") return `${base}/`;
   if (screenKey === "whatsapp") return `${base}/whatsapp/`;
   if (screenKey === "linkedin") return `${base}/linkedin/`;
@@ -332,6 +333,7 @@ function bindEvents() {
 }
 
 async function bootstrapV2({ locale = "en", screenKey = "home" } = {}) {
+  state.basePath = getRuntimeBasePath();
   state.locale = locale;
   state.copy = getV2LocaleConfig(locale);
   state.screenKey = screenKey;
