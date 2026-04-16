@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="refresh" content="0;url=/en/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MyCalls - Redirecting...</title>
+  </head>
+  <body>
+    <script>
+      const match = window.location.pathname.match(/^\/en\/v2\/opportunities\/([^/]+)\/?$/);
+      const target = match ? `/en/opportunities/${match[1]}/` : "/en/";
+      window.location.replace(`${target}${window.location.search}${window.location.hash}`);
+    </script>
+    <p>Redirecting to <a href="/en/">MyCalls</a>...</p>
+  </body>
+</html>

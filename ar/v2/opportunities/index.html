@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="refresh" content="0;url=/ar/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ماي كولز - جارٍ التحويل...</title>
+  </head>
+  <body>
+    <script>
+      const match = window.location.pathname.match(/^\/ar\/v2\/opportunities\/([^/]+)\/?$/);
+      const target = match ? `/ar/opportunities/${match[1]}/` : "/ar/";
+      window.location.replace(`${target}${window.location.search}${window.location.hash}`);
+    </script>
+    <p>جارٍ التحويل إلى <a href="/ar/">ماي كولز</a>...</p>
+  </body>
+</html>

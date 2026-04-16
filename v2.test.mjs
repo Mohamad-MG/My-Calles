@@ -8,7 +8,7 @@ import { createAppServer } from "./server.mjs";
 import { createV2SeedData, getAllHomeSummaries, normalizeV2State } from "./v2/domain.mjs";
 
 async function startTestServer() {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "mycalls-v2-server-"));
+  const tempDir = await mkdtemp(path.join(process.env.TEST_TMPDIR || "/tmp", "mycalls-v2-server-"));
   const app = createAppServer({ dataDir: tempDir });
   await app.start(0);
   const address = app.server.address();
@@ -282,6 +282,24 @@ test("legacy versioned API routes redirect to canonical endpoints", async () => 
     assert.equal(oldState.headers.get("location"), "/state");
     assert.equal(oldCreate.status, 302);
     assert.equal(oldCreate.headers.get("location"), "/whatsapp_items");
+  } finally {
+    await app.stop();
+  }
+});
+
+test("legacy versioned frontend routes redirect to canonical localized routes", async () => {
+  const { app, baseUrl } = await startTestServer();
+  try {
+    const home = await fetch(`${baseUrl}/en/v2/`, { redirect: "manual" });
+    const workspace = await fetch(`${baseUrl}/ar/v2/google/`, { redirect: "manual" });
+    const opportunity = await fetch(`${baseUrl}/en/v2/opportunities/opp-1/`, { redirect: "manual" });
+
+    assert.equal(home.status, 302);
+    assert.equal(home.headers.get("location"), "/en/");
+    assert.equal(workspace.status, 302);
+    assert.equal(workspace.headers.get("location"), "/ar/google/");
+    assert.equal(opportunity.status, 302);
+    assert.equal(opportunity.headers.get("location"), "/en/opportunities/opp-1/");
   } finally {
     await app.stop();
   }
