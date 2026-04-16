@@ -60,9 +60,9 @@ function buildRecentActivity(records = []) {
 class V2StateStore {
   constructor({ dataDir }) {
     this.dataDir = dataDir;
-    this.stateFile = path.join(dataDir, "dashboard-v2-state.json");
-    this.auditFile = path.join(dataDir, "dashboard-v2-audit-log.jsonl");
-    this.eventsFile = path.join(dataDir, "dashboard-v2-observability-log.jsonl");
+    this.stateFile = path.join(dataDir, "dashboard-state.json");
+    this.auditFile = path.join(dataDir, "audit-log.jsonl");
+    this.eventsFile = path.join(dataDir, "observability-log.jsonl");
     this.state = null;
     this.recentActivity = [];
     this.metrics = {
@@ -367,7 +367,7 @@ class V2StateStore {
     await this.#commit({
       action: reason,
       entity: "state",
-      id: "dashboard-v2",
+      id: "dashboard",
       before: beforeState,
       after: nextState,
       state: nextState,

@@ -6,15 +6,15 @@ function createSessionId() {
 }
 
 async function fetchV2State({ sessionId }) {
-  const response = await fetch("/v2/state", {
+  const response = await fetch("/state", {
     headers: {
-      "X-User": "dashboard-v2-web",
+      "X-User": "dashboard-web",
       "X-Session-Id": sessionId,
     },
   });
   const payload = await response.json();
   if (!response.ok) {
-    throw new Error(payload.error || "Failed to load V2 state.");
+    throw new Error(payload.error || "Failed to load state.");
   }
   return {
     payload,
@@ -27,7 +27,7 @@ async function sendV2Request(path, { method = "GET", body, sessionId, version = 
     method,
     headers: {
       "Content-Type": "application/json",
-      "X-User": "dashboard-v2-web",
+      "X-User": "dashboard-web",
       "X-Session-Id": sessionId,
       "X-Known-State-Version": String(version || 0),
     },
@@ -35,7 +35,7 @@ async function sendV2Request(path, { method = "GET", body, sessionId, version = 
   });
   const payload = await response.json();
   if (!response.ok) {
-    throw new Error(payload.error || "V2 request failed.");
+    throw new Error(payload.error || "Request failed.");
   }
   return {
     payload,

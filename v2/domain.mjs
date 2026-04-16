@@ -7,7 +7,7 @@ import {
   validateOpportunityTransition,
 } from "./opportunity-domain.mjs";
 
-const V2_STORAGE_KEY = "mycalls-ops-v2";
+const V2_STORAGE_KEY = "mycalls-ops";
 
 const V2_ENTITIES = {
   whatsapp_item: "whatsapp_items",
@@ -596,7 +596,7 @@ function createV2SeedData() {
     ],
     opportunities: [
       {
-        id: "opp-v2-1",
+        id: "opp-1",
         qualified_lead_id: "ql-legacy",
         origin_channel: "LinkedIn",
         company_name: "Helio Clinics",

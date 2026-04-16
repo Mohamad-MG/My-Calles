@@ -40,7 +40,7 @@ function renderHome(app) {
     <section class="v2-screen home-screen">
       <header class="v2-hero">
         <div>
-          <p class="v2-kicker">V2</p>
+          <p class="v2-kicker">${escapeHtml(copy.meta.productSubtitle)}</p>
           <h1>${escapeHtml(copy.home.title)}</h1>
           <p class="v2-hero-copy">${escapeHtml(copy.home.subtitle)}</p>
         </div>

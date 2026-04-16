@@ -3,7 +3,7 @@ export default {
     locale: "ar",
     lang: "ar",
     dir: "rtl",
-    title: "نظام التشغيل V2",
+    title: "نظام تشغيل ماي كولز",
     productName: "ماي كولز",
     productSubtitle: "تشغيل القنوات يوميًا",
     brandMark: "مك",

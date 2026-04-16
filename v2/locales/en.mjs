@@ -3,9 +3,9 @@ export default {
     locale: "en",
     lang: "en",
     dir: "ltr",
-    title: "MyCalls V2 Operating System",
+    title: "MyCalls Operating System",
     productName: "MyCalls",
-    productSubtitle: "Channel Ops V2",
+    productSubtitle: "Channel operations",
     brandMark: "MC",
   },
   nav: {

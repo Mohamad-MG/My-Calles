@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "serve": "npx --yes http-server . -p 4173 -o /en/v2/ --cors -c-1",
+    "serve": "npx --yes http-server . -p 4173 -o /en/ --cors -c-1",
     "test": "node --test v2.test.mjs"
   }
 }

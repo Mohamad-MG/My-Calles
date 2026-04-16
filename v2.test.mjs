@@ -18,7 +18,7 @@ async function startTestServer() {
   };
 }
 
-test("V2 state normalizes the explicit entity collections", () => {
+test("state normalizes the explicit entity collections", () => {
   const normalized = normalizeV2State({
     whatsapp_items: [{ id: "wa-x", phone: "1", contact_name: "A", company_name: "B", summary: "S", next_step: "N", next_step_date: "2026-04-15" }],
   });
@@ -31,7 +31,7 @@ test("V2 state normalizes the explicit entity collections", () => {
   assert.ok(Array.isArray(normalized.opportunities));
 });
 
-test("V2 home summaries stay channel-first with one resume item per channel", () => {
+test("home summaries stay channel-first with one resume item per channel", () => {
   const seed = createV2SeedData();
   const summaries = getAllHomeSummaries(seed);
 
@@ -40,10 +40,10 @@ test("V2 home summaries stay channel-first with one resume item per channel", ()
   assert.ok(summaries.every((item) => "resume_item" in item));
 });
 
-test("GET /v2/state returns isolated V2 state", async () => {
+test("GET /state returns isolated state", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
-    const response = await fetch(`${baseUrl}/v2/state`);
+    const response = await fetch(`${baseUrl}/state`);
     const payload = await response.json();
 
     assert.equal(response.status, 200);
@@ -55,10 +55,10 @@ test("GET /v2/state returns isolated V2 state", async () => {
   }
 });
 
-test("PATCH /v2 rejects invalid explicit transitions", async () => {
+test("PATCH rejects invalid explicit transitions", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
-    const response = await fetch(`${baseUrl}/v2/whatsapp_items/wa-1`, {
+    const response = await fetch(`${baseUrl}/whatsapp_items/wa-1`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -75,10 +75,10 @@ test("PATCH /v2 rejects invalid explicit transitions", async () => {
   }
 });
 
-test("POST /v2/conversions/qualified-leads creates one qualified lead and preserves source record", async () => {
+test("POST /conversions/qualified-leads creates one qualified lead and preserves source record", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
-    const response = await fetch(`${baseUrl}/v2/conversions/qualified-leads`, {
+    const response = await fetch(`${baseUrl}/conversions/qualified-leads`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -104,10 +104,10 @@ test("POST /v2/conversions/qualified-leads creates one qualified lead and preser
   }
 });
 
-test("duplicate V2 qualified lead conversion is rejected for the same source record", async () => {
+test("duplicate qualified lead conversion is rejected for the same source record", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
-    await fetch(`${baseUrl}/v2/conversions/qualified-leads`, {
+    await fetch(`${baseUrl}/conversions/qualified-leads`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -124,7 +124,7 @@ test("duplicate V2 qualified lead conversion is rejected for the same source rec
       }),
     });
 
-    const second = await fetch(`${baseUrl}/v2/conversions/qualified-leads`, {
+    const second = await fetch(`${baseUrl}/conversions/qualified-leads`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -149,17 +149,17 @@ test("duplicate V2 qualified lead conversion is rejected for the same source rec
   }
 });
 
-test("POST /v2/opportunities only accepts ready handoff records and prevents duplicates", async () => {
+test("POST /opportunities only accepts ready handoff records and prevents duplicates", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
-    let response = await fetch(`${baseUrl}/v2/opportunities`, {
+    let response = await fetch(`${baseUrl}/opportunities`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-User": "v2-test",
       },
       body: JSON.stringify({
-        id: "opp-invalid-v2",
+        id: "opp-invalid",
         qualified_lead_id: "ql-1",
         company_name: "Not Ready",
         buyer_readiness: "High",
@@ -174,7 +174,7 @@ test("POST /v2/opportunities only accepts ready handoff records and prevents dup
     assert.equal(response.status, 400);
     assert.match(payload.error, /Ready for Opportunity/i);
 
-    await fetch(`${baseUrl}/v2/qualified_leads/ql-1`, {
+    await fetch(`${baseUrl}/qualified_leads/ql-1`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -183,14 +183,14 @@ test("POST /v2/opportunities only accepts ready handoff records and prevents dup
       body: JSON.stringify({ handoff_status: "Ready for Opportunity" }),
     });
 
-    response = await fetch(`${baseUrl}/v2/opportunities`, {
+    response = await fetch(`${baseUrl}/opportunities`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-User": "v2-test",
       },
       body: JSON.stringify({
-        id: "opp-valid-v2",
+        id: "opp-valid",
         qualified_lead_id: "ql-1",
         company_name: "Ready Deal",
         buyer_readiness: "High",
@@ -203,16 +203,16 @@ test("POST /v2/opportunities only accepts ready handoff records and prevents dup
     });
     payload = await response.json();
     assert.equal(response.status, 201);
-    assert.ok(payload.opportunities.some((item) => item.id === "opp-valid-v2"));
+    assert.ok(payload.opportunities.some((item) => item.id === "opp-valid"));
 
-    const duplicate = await fetch(`${baseUrl}/v2/opportunities`, {
+    const duplicate = await fetch(`${baseUrl}/opportunities`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-User": "v2-test",
       },
       body: JSON.stringify({
-        id: "opp-duplicate-v2",
+        id: "opp-duplicate",
         qualified_lead_id: "ql-1",
         company_name: "Ready Deal",
         buyer_readiness: "High",
@@ -231,12 +231,12 @@ test("POST /v2/opportunities only accepts ready handoff records and prevents dup
   }
 });
 
-test("V2 localized routes and dynamic opportunity route resolve to HTML", async () => {
+test("localized routes and dynamic opportunity route resolve to HTML", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
-    const home = await fetch(`${baseUrl}/en/v2/`);
-    const google = await fetch(`${baseUrl}/ar/v2/google/`);
-    const opportunity = await fetch(`${baseUrl}/en/v2/opportunities/opp-v2-1/`);
+    const home = await fetch(`${baseUrl}/en/`);
+    const google = await fetch(`${baseUrl}/ar/google/`);
+    const opportunity = await fetch(`${baseUrl}/en/opportunities/opp-1/`);
 
     assert.equal(home.status, 200);
     assert.equal(google.status, 200);
@@ -247,7 +247,7 @@ test("V2 localized routes and dynamic opportunity route resolve to HTML", async 
   }
 });
 
-test("root locale entrypoints now point to V2 instead of rendering V1 shells", async () => {
+test("root locale entrypoints render the canonical non-versioned shell", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
     const root = await fetch(`${baseUrl}/`);
@@ -257,24 +257,31 @@ test("root locale entrypoints now point to V2 instead of rendering V1 shells", a
     const englishHtml = await english.text();
     const arabicHtml = await arabic.text();
 
-    assert.match(rootHtml, /en\/v2\//);
-    assert.match(englishHtml, /\.\/v2\//);
-    assert.match(arabicHtml, /\.\/v2\//);
-    assert.doesNotMatch(englishHtml, /bootstrapApp/);
-    assert.doesNotMatch(arabicHtml, /bootstrapApp/);
+    assert.match(rootHtml, /en\//);
+    assert.match(englishHtml, /bootstrapV2/);
+    assert.match(arabicHtml, /bootstrapV2/);
+    assert.doesNotMatch(englishHtml, /MyCalls V2|Channel Ops V2|>V2</);
+    assert.doesNotMatch(arabicHtml, /نظام التشغيل V2|تشغيل القنوات V2|>V2</);
   } finally {
     await app.stop();
   }
 });
 
-test("legacy V1 API routes are no longer available", async () => {
+test("legacy versioned API routes redirect to canonical endpoints", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
-    const oldState = await fetch(`${baseUrl}/state`);
-    const oldLeads = await fetch(`${baseUrl}/leads`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const oldState = await fetch(`${baseUrl}/v2/state`, { redirect: "manual" });
+    const oldCreate = await fetch(`${baseUrl}/v2/whatsapp_items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      redirect: "manual",
+    });
 
-    assert.equal(oldState.status, 404);
-    assert.equal(oldLeads.status, 404);
+    assert.equal(oldState.status, 302);
+    assert.equal(oldState.headers.get("location"), "/state");
+    assert.equal(oldCreate.status, 302);
+    assert.equal(oldCreate.headers.get("location"), "/whatsapp_items");
   } finally {
     await app.stop();
   }

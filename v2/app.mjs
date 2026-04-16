@@ -28,7 +28,7 @@ const state = {
 let elements = null;
 
 function routeFor(screenKey, locale = state.locale, params = {}) {
-  const base = `/${locale}/v2`;
+  const base = `/${locale}`;
   if (screenKey === "home") return `${base}/`;
   if (screenKey === "whatsapp") return `${base}/whatsapp/`;
   if (screenKey === "linkedin") return `${base}/linkedin/`;
@@ -39,7 +39,7 @@ function routeFor(screenKey, locale = state.locale, params = {}) {
 }
 
 function getOpportunityIdFromPath() {
-  const match = window.location.pathname.match(/\/v2\/opportunities\/([^/]+)\/?$/);
+  const match = window.location.pathname.match(/\/opportunities\/([^/]+)\/?$/);
   return match?.[1] || "";
 }
 
@@ -175,7 +175,7 @@ function getEntityPrefix(entity) {
     google_inbound_items: "gi",
     google_rank_tasks: "gr",
     qualified_leads: "ql",
-    opportunities: "oppv2",
+    opportunities: "opp",
   };
   return prefixes[entity] || "rec";
 }
@@ -187,7 +187,8 @@ async function handleCreateEntity(form) {
     values.task_summary = values.summary || "";
   }
   values.id = values.id || createId(getEntityPrefix(entity));
-  const next = await sendV2Request(`/v2/${entity}`, {
+  const endpoint = `/${entity}`;
+  const next = await sendV2Request(endpoint, {
     method: "POST",
     body: values,
     sessionId: state.sessionId,
@@ -202,7 +203,7 @@ async function handleCreateEntity(form) {
 async function handleEditRecord(form) {
   const [entity, id] = form.dataset.editRecord.split(":");
   const values = formToObject(form);
-  const next = await sendV2Request(`/v2/${entity}/${id}`, {
+  const next = await sendV2Request(`/${entity}/${id}`, {
     method: "PATCH",
     body: values,
     sessionId: state.sessionId,
@@ -217,7 +218,7 @@ async function handleEditRecord(form) {
 async function handleConvertSource(form) {
   const [entity, id] = form.dataset.convertSource.split(":");
   const values = formToObject(form);
-  const next = await sendV2Request("/v2/conversions/qualified-leads", {
+  const next = await sendV2Request("/conversions/qualified-leads", {
     method: "POST",
     body: {
       id: createId("ql"),
@@ -238,8 +239,8 @@ async function handleConvertSource(form) {
 async function handleCreateOpportunity(form) {
   const qualifiedLeadId = form.dataset.createOpportunity;
   const values = formToObject(form);
-  const opportunityId = createId("oppv2");
-  const next = await sendV2Request("/v2/opportunities", {
+  const opportunityId = createId("opp");
+  const next = await sendV2Request("/opportunities", {
     method: "POST",
     body: {
       id: opportunityId,
@@ -257,7 +258,7 @@ async function handleCreateOpportunity(form) {
 async function handleTransition(token) {
   const [entity, id, nextStatus] = token.split(":");
   const statusField = getStatusField(entity);
-  const next = await sendV2Request(`/v2/${entity}/${id}`, {
+  const next = await sendV2Request(`/${entity}/${id}`, {
     method: "PATCH",
     body: { [statusField]: nextStatus },
     sessionId: state.sessionId,
