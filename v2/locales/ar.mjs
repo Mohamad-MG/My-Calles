@@ -128,7 +128,7 @@ export default {
     "Awaiting Reply": "بانتظار الرد",
     "In Conversation": "في محادثة",
     "Needs Response": "يحتاج استجابة",
-    Follow-up: "متابعة",
+    "Follow-up": "متابعة",
     Backlog: "قائمة مؤجلة",
     "In Progress": "قيد التنفيذ",
     "Waiting Data": "بانتظار البيانات",
