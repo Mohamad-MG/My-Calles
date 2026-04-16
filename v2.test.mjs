@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { createAppServer } from "./server.mjs";
 import { createV2SeedData, getAllHomeSummaries, normalizeV2State } from "./v2/domain.mjs";
+import { getRuntimeBasePath, getRuntimeMode, getStaticStatePath } from "./v2/shared-state.mjs";
 
 async function startTestServer() {
   const tempDir = await mkdtemp(path.join(process.env.TEST_TMPDIR || "/tmp", "mycalls-v2-server-"));
@@ -38,6 +39,42 @@ test("home summaries stay channel-first with one resume item per channel", () =>
   assert.equal(summaries.length, 3);
   assert.ok(summaries.every((item) => ["WhatsApp", "LinkedIn", "Google"].includes(item.channel)));
   assert.ok(summaries.every((item) => "resume_item" in item));
+});
+
+test("GitHub Pages runtime resolves static mode and repo-aware data path", () => {
+  const originalWindow = global.window;
+  global.window = {
+    location: {
+      hostname: "mohamad-mg.github.io",
+      pathname: "/My-Calles/en/",
+    },
+  };
+
+  try {
+    assert.equal(getRuntimeMode(), "static");
+    assert.equal(getRuntimeBasePath(), "/My-Calles");
+    assert.equal(getStaticStatePath(), "/My-Calles/data/dashboard-state.json");
+  } finally {
+    global.window = originalWindow;
+  }
+});
+
+test("server runtime stays in live mode without project base path", () => {
+  const originalWindow = global.window;
+  global.window = {
+    location: {
+      hostname: "localhost",
+      pathname: "/en/",
+    },
+  };
+
+  try {
+    assert.equal(getRuntimeMode(), "live");
+    assert.equal(getRuntimeBasePath(), "");
+    assert.equal(getStaticStatePath(), "/data/dashboard-state.json");
+  } finally {
+    global.window = originalWindow;
+  }
 });
 
 test("GET /state returns isolated state", async () => {

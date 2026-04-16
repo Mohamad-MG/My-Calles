@@ -1,3 +1,4 @@
 data/*.json
 data/*.jsonl
 !data/.gitkeep
+!data/dashboard-state.json

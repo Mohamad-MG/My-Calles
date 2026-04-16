@@ -11,9 +11,18 @@ function getRuntimeBasePath() {
   return match?.[1] || "";
 }
 
+function getRuntimeMode() {
+  if (typeof window === "undefined") return "live";
+  return window.location.hostname.includes("github.io") ? "static" : "live";
+}
+
 function withBasePath(path) {
   const basePath = getRuntimeBasePath();
   return `${basePath}${path}`;
+}
+
+function getStaticStatePath() {
+  return withBasePath("/data/dashboard-state.json");
 }
 
 async function readJson(response, fallbackMessage) {
@@ -30,6 +39,18 @@ async function fetchV2State({ sessionId }) {
     "X-User": "dashboard-web",
     "X-Session-Id": sessionId,
   };
+
+  if (getRuntimeMode() === "static") {
+    const response = await fetch(getStaticStatePath(), { headers });
+    const payload = await readJson(response, "Failed to load static state.");
+    if (!response.ok) {
+      throw new Error(payload.error || "Failed to load static state.");
+    }
+    return {
+      payload,
+      version: Number(payload?._meta?.version || 0),
+    };
+  }
 
   try {
     const response = await fetch(withBasePath("/state"), { headers });
@@ -55,6 +76,10 @@ async function fetchV2State({ sessionId }) {
 }
 
 async function sendV2Request(path, { method = "GET", body, sessionId, version = 0 } = {}) {
+  if (getRuntimeMode() === "static") {
+    throw new Error("This GitHub Pages deployment is read-only. Run the Node server for live state changes.");
+  }
+
   const response = await fetch(withBasePath(path), {
     method,
     headers: {
@@ -80,4 +105,11 @@ async function sendV2Request(path, { method = "GET", body, sessionId, version = 
   };
 }
 
-export { createSessionId, fetchV2State, getRuntimeBasePath, sendV2Request };
+export {
+  createSessionId,
+  fetchV2State,
+  getRuntimeBasePath,
+  getRuntimeMode,
+  getStaticStatePath,
+  sendV2Request,
+};
