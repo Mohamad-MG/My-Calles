@@ -81,7 +81,7 @@ function renderHome(app) {
                       (item) => `
                         <button class="app-list-row" type="button" data-open-drawer="qualified_leads:${item.id}">
                           <div>
-                            <strong>${escapeHtml(item.pain_summary || item.origin_channel)}</strong>
+                            <strong>${escapeHtml(item.pain_summary || localizeValue(copy, item.origin_channel))}</strong>
                             <p>${escapeHtml(item.qualification_note || "—")}</p>
                           </div>
                           <div class="app-list-meta">

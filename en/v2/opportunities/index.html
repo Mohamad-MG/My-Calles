@@ -2,15 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="refresh" content="0;url=../../" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MyCalls - Redirecting...</title>
   </head>
   <body>
     <script>
       const targetPath = window.location.pathname.replace(/\/v2(?=\/|$)/, "");
-      window.location.replace(`${targetPath}${window.location.search}${window.location.hash}`);
+      const targetUrl = `${targetPath}${window.location.search}${window.location.hash}`;
+      document.getElementById("legacy-opportunity-link").href = targetUrl;
+      window.location.replace(targetUrl);
     </script>
-    <p>Redirecting to <a href="../../">MyCalls</a>...</p>
+    <p>Redirecting to <a id="legacy-opportunity-link" href="../../">MyCalls</a>...</p>
   </body>
 </html>

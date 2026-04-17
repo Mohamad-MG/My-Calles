@@ -38,7 +38,7 @@ function renderOpportunityDetail(app, opportunity) {
             ${renderKeyValue(copy.forms.stakeholderStatus, localizeValue(copy, opportunity.stakeholder_status))}
             ${renderKeyValue(copy.forms.estimatedValue, String(opportunity.estimated_value || 0))}
             ${renderKeyValue(copy.chrome.nextStepDate, formatShortDate(opportunity.next_step_date, copy.meta.lang))}
-            ${renderKeyValue(copy.chrome.origin, opportunity.origin_channel || "—")}
+            ${renderKeyValue(copy.chrome.origin, localizeValue(copy, opportunity.origin_channel))}
           </div>
         </article>
         <article class="app-panel">

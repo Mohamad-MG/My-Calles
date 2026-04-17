@@ -43,7 +43,7 @@ function renderHandoff(app) {
                                   <div class="app-card-head">
                                     <div>
                                       <strong>${escapeHtml(item.pain_summary)}</strong>
-                                      <p>${escapeHtml(item.origin_channel)} • ${escapeHtml(localizeValue(copy, item.origin_entity))}</p>
+                                      <p>${escapeHtml(localizeValue(copy, item.origin_channel))} • ${escapeHtml(localizeValue(copy, item.origin_entity))}</p>
                                     </div>
                                     ${renderBadge(localizeValue(copy, item.handoff_status))}
                                   </div>
@@ -75,7 +75,7 @@ function renderHandoffDrawer(app, record) {
     <div class="app-drawer-stack">
       ${renderSectionHeading(copy.nav.handoff, record.pain_summary)}
       <div class="app-detail-grid">
-        ${renderKeyValue(copy.chrome.origin, `${record.origin_channel} / ${localizeValue(copy, record.origin_entity)}`)}
+        ${renderKeyValue(copy.chrome.origin, `${localizeValue(copy, record.origin_channel)} / ${localizeValue(copy, record.origin_entity)}`)}
         ${renderKeyValue(copy.chrome.handoffStatus, localizeValue(copy, record.handoff_status))}
         ${renderKeyValue(copy.chrome.service, localizeValue(copy, record.recommended_service))}
         ${renderKeyValue(copy.chrome.confidence, localizeValue(copy, record.recommended_service_confidence))}
