@@ -422,6 +422,64 @@ async function handleImportJson(form) {
   renderApp();
 }
 
+function syncSearchKeywordWorkbenchForm(form) {
+  const hiddenSubkeywords = form.querySelector('[data-hidden-subkeywords]');
+  const hiddenTitlePairs = form.querySelector('[data-hidden-title-pairs]');
+  const hiddenArticleIdeas = form.querySelector('[data-hidden-article-ideas]');
+  const rows = [...form.querySelectorAll('[data-keyword-row]')];
+
+  const subkeywords = [];
+  const titlePairs = [];
+  const articleIdeas = [];
+
+  for (const row of rows) {
+    const subkeywordInput = row.querySelector('[data-subkeyword-item]');
+    const primaryInput = row.querySelector('[data-title-primary]');
+    const secondaryInput = row.querySelector('[data-title-secondary]');
+
+    const subkeyword = String(subkeywordInput?.value || '').trim();
+    const primaryTitle = String(primaryInput?.value || '').trim() || String(primaryInput?.dataset.originalValue || '').trim();
+    const secondaryTitle = String(secondaryInput?.value || '').trim() || String(secondaryInput?.dataset.originalValue || '').trim();
+    const status = String(primaryInput?.dataset.articleStatus || 'Idea').trim() || 'Idea';
+
+    if (subkeyword) {
+      subkeywords.push(subkeyword);
+    }
+
+    if (subkeyword || primaryTitle || secondaryTitle) {
+      titlePairs.push({
+        subkeyword,
+        primary_title: primaryTitle,
+        secondary_title: secondaryTitle,
+      });
+    }
+
+    if (primaryTitle) {
+      articleIdeas.push({ title: primaryTitle, status });
+    }
+  }
+
+  if (hiddenSubkeywords) {
+    hiddenSubkeywords.value = subkeywords.join('\n');
+  }
+
+  if (hiddenTitlePairs) {
+    hiddenTitlePairs.value = JSON.stringify(titlePairs, null, 2);
+  }
+
+  if (hiddenArticleIdeas) {
+    if (articleIdeas.length === 10) {
+      hiddenArticleIdeas.name = 'article_ideas';
+      hiddenArticleIdeas.disabled = false;
+      hiddenArticleIdeas.value = JSON.stringify(articleIdeas, null, 2);
+    } else {
+      hiddenArticleIdeas.disabled = true;
+      hiddenArticleIdeas.removeAttribute('name');
+      hiddenArticleIdeas.value = '';
+    }
+  }
+}
+
 function refreshPromptPreview(slotElement) {
   if (!slotElement) return;
   const select = slotElement.querySelector("[data-template-select]");
@@ -512,6 +570,9 @@ function bindEvents() {
   document.body.addEventListener("submit", async (event) => {
     const form = event.target;
     event.preventDefault();
+    if (form.dataset.searchKeywordWorkbench) {
+      syncSearchKeywordWorkbenchForm(form);
+    }
     try {
       if (form.dataset.createEntity) {
         await handleCreateEntity(form);

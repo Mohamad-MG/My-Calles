@@ -112,6 +112,143 @@ function renderMapsLeadCard(record, copy) {
   `;
 }
 
+function safeJsonParse(value, fallback = null) {
+  if (!value || typeof value !== "string") return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function defaultText(value, fallback = "") {
+  const text = String(value || "").trim();
+  return text || fallback;
+}
+
+function isArabicText(value = "") {
+  return /[\u0600-\u06FF]/.test(String(value || ""));
+}
+
+function getMapsAgentCopy(state, record, copy) {
+  const primaryTemplate = findTemplate(state, record.research_primary_template_id);
+  const secondaryTemplate = findTemplate(state, record.research_secondary_template_id);
+  const shortlistTemplate = findTemplate(state, record.shortlist_template_id);
+
+  return {
+    agentOne: {
+      boxOne: defaultText(record.maps_agent_one_box_one, primaryTemplate?.base_prompt || copy.modules.google.mapsSearchBoxOneFallback),
+      boxTwo: defaultText(record.maps_agent_one_box_two, secondaryTemplate?.base_prompt || primaryTemplate?.base_prompt || copy.modules.google.mapsSearchBoxTwoFallback),
+      boxThree: defaultText(record.maps_agent_one_box_three, record.search_goal || record.research_primary_override || copy.modules.google.mapsSearchBoxThreeFallback),
+    },
+    agentTwo: {
+      boxOne: defaultText(record.maps_agent_two_box_one, shortlistTemplate?.base_prompt || copy.modules.google.mapsAnalysisBoxOneFallback),
+      boxTwo: defaultText(record.maps_agent_two_box_two, record.shortlist_override || copy.modules.google.mapsAnalysisBoxTwoFallback),
+      boxThree: defaultText(record.maps_agent_two_box_three, shortlistTemplate?.output_contract_json || copy.modules.google.mapsAnalysisBoxThreeFallback),
+    },
+  };
+}
+
+function getSearchAgentRole(state, record, copy) {
+  const strategyTemplate = findTemplate(state, record.keyword_strategy_template_id);
+  return defaultText(record.search_agent_role, strategyTemplate?.base_prompt || copy.modules.google.searchRoleFallback);
+}
+
+function getKeywordRows(record) {
+  const pairs = safeJsonParse(record.article_title_pairs_json, []);
+  const pairList = Array.isArray(pairs) ? pairs : [];
+  const subkeywords = Array.isArray(record.subkeywords) ? record.subkeywords : [];
+  const articleIdeas = Array.isArray(record.article_ideas) ? record.article_ideas : [];
+
+  return Array.from({ length: 10 }, (_, index) => {
+    const pair = pairList[index] && typeof pairList[index] === "object" ? pairList[index] : {};
+    const idea = articleIdeas[index] && typeof articleIdeas[index] === "object" ? articleIdeas[index] : {};
+
+    return {
+      index,
+      subkeyword: defaultText(pair.subkeyword, subkeywords[index] || ""),
+      primaryTitle: defaultText(pair.primary_title, idea.title || ""),
+      secondaryTitle: defaultText(pair.secondary_title, ""),
+      status: idea.status || "Idea",
+    };
+  });
+}
+
+function renderAgentTextarea(name, label, value, rows = 8) {
+  return `
+    <label class="app-agent-copy-box">
+      <span>${escapeHtml(label)}</span>
+      <textarea name="${escapeHtml(name)}" rows="${rows}">${escapeHtml(value)}</textarea>
+    </label>
+  `;
+}
+
+function renderImportCard(title, subtitle, token, value, copy) {
+  return `
+    <form class="app-panel app-result-card" data-import-json="${escapeHtml(token)}">
+      <div class="app-subpanel-head">
+        <div>
+          <p class="app-kicker">${escapeHtml(title)}</p>
+          <h4>${escapeHtml(subtitle)}</h4>
+        </div>
+      </div>
+      <label class="app-agent-copy-box">
+        <span>${escapeHtml(copy.chrome.resultJson)}</span>
+        <textarea name="result_json" rows="12">${escapeHtml(value || "")}</textarea>
+      </label>
+      <div class="app-form-actions">
+        <button class="app-button primary" type="submit">${escapeHtml(copy.chrome.importJson)}</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderKeywordWorkbenchRow(row, copy) {
+  return `
+    <div class="app-keyword-row" data-keyword-row>
+      <div class="app-keyword-cell">
+        <span>${escapeHtml(copy.chrome.subkeywords)} ${row.index + 1}</span>
+        <input type="text" value="${escapeHtml(row.subkeyword)}" data-subkeyword-item />
+      </div>
+      <div class="app-keyword-cell">
+        <span>${escapeHtml(copy.chrome.primaryTitleModel)}</span>
+        <input
+          type="text"
+          value="${escapeHtml(row.primaryTitle)}"
+          data-title-primary
+          data-article-status="${escapeHtml(row.status)}"
+          data-original-value="${escapeHtml(row.primaryTitle)}"
+          placeholder="${escapeHtml(copy.modules.google.primaryTitlePlaceholder)}"
+        />
+      </div>
+      <div class="app-keyword-cell">
+        <span>${escapeHtml(copy.chrome.secondaryTitleModel)}</span>
+        <input
+          type="text"
+          value="${escapeHtml(row.secondaryTitle)}"
+          data-title-secondary
+          data-original-value="${escapeHtml(row.secondaryTitle)}"
+          placeholder="${escapeHtml(copy.modules.google.secondaryTitlePlaceholder)}"
+        />
+      </div>
+    </div>
+  `;
+}
+
+function renderKeywordTab(campaign, activeCampaignId, copy) {
+  const active = campaign.id === activeCampaignId;
+  const languageBadge = isArabicText(campaign.primary_keyword) ? copy.modules.google.keywordArabicGroup : copy.modules.google.keywordEnglishGroup;
+  return `
+    <button class="app-tab ${active ? "active" : ""}" type="button" data-set-google-campaign="${campaign.id}">
+      ${escapeHtml(campaign.primary_keyword || copy.chrome.empty)} ${renderBadge(languageBadge, "muted")}
+    </button>
+  `;
+}
+
+function renderKeywordPlaceholder(label) {
+  return `<span class="app-tab app-tab-placeholder">${escapeHtml(label)}</span>`;
+}
+
 function renderMapsOps(app) {
   const { copy, state } = app;
   const missions = selectGoogleMapsMissions(state);
@@ -132,6 +269,9 @@ function renderMapsOps(app) {
     shortlist: missionLeads.filter((item) => item.status === "Shortlisted").length,
     qualified: missionLeads.filter((item) => item.status === "Qualified").length,
   };
+
+  const qualifiedLeads = filteredLeads.filter((item) => item.status === "Qualified");
+  const promptCopy = activeMission ? getMapsAgentCopy(state, activeMission, copy) : null;
 
   return `
     <section class="app-google-layout">
@@ -172,7 +312,7 @@ function renderMapsOps(app) {
       </aside>
       <div class="app-screen">
         ${
-          activeMission
+          activeMission && promptCopy
             ? `
               <article class="app-panel">
                 ${renderSectionHeading(
@@ -194,7 +334,45 @@ function renderMapsOps(app) {
                   ${renderBadge(`${escapeHtml(copy.forms.cityScope)}: ${escapeHtml(activeMission.city_scope)}`, "muted")}
                 </div>
               </article>
+
+              <form class="app-panel" data-edit-record="google_maps_missions:${activeMission.id}">
+                ${renderSectionHeading(copy.modules.google.mapsAgentOne, copy.modules.google.mapsAgentOne)}
+                <p class="app-google-section-note">${escapeHtml(copy.modules.google.mapsAgentOneHint)}</p>
+                <div class="app-agent-copy-grid">
+                  ${renderAgentTextarea("maps_agent_one_box_one", copy.modules.google.mapsSearchBoxOne, promptCopy.agentOne.boxOne)}
+                  ${renderAgentTextarea("maps_agent_one_box_two", copy.modules.google.mapsSearchBoxTwo, promptCopy.agentOne.boxTwo)}
+                  ${renderAgentTextarea("maps_agent_one_box_three", copy.modules.google.mapsSearchBoxThree, promptCopy.agentOne.boxThree)}
+                </div>
+                <div class="app-form-actions"><button class="app-button primary" type="submit">${escapeHtml(copy.chrome.saveAgentCopy)}</button></div>
+              </form>
+
               <article class="app-panel">
+                ${renderSectionHeading(copy.modules.google.mapsResults, copy.modules.google.mapsResults)}
+                <p class="app-google-section-note">${escapeHtml(copy.modules.google.mapsResultsHint)}</p>
+                <div class="app-inline-badges">
+                  ${renderBadge(`${escapeHtml(copy.chrome.totalLeads)} ${counts.total}`, "muted")}
+                  ${renderBadge(`${escapeHtml(copy.chrome.shortlistCount)} ${counts.shortlist}`, "muted")}
+                  ${renderBadge(`${escapeHtml(copy.chrome.qualifiedReady)} ${counts.qualified}`, "accent")}
+                </div>
+              </article>
+
+              <section class="app-google-results-grid">
+                ${renderImportCard(copy.modules.google.mapsResults, copy.chrome.resultLanePrimary, `maps:${activeMission.id}:research_primary`, activeMission.research_primary_result_json, copy)}
+                ${renderImportCard(copy.modules.google.mapsResults, copy.chrome.resultLaneSecondary, `maps:${activeMission.id}:research_secondary`, activeMission.research_secondary_result_json, copy)}
+              </section>
+
+              <form class="app-panel" data-edit-record="google_maps_missions:${activeMission.id}">
+                ${renderSectionHeading(copy.modules.google.mapsAgentTwo, copy.modules.google.mapsAgentTwo)}
+                <p class="app-google-section-note">${escapeHtml(copy.modules.google.mapsAgentTwoHint)}</p>
+                <div class="app-agent-copy-grid">
+                  ${renderAgentTextarea("maps_agent_two_box_one", copy.modules.google.mapsAnalysisBoxOne, promptCopy.agentTwo.boxOne)}
+                  ${renderAgentTextarea("maps_agent_two_box_two", copy.modules.google.mapsAnalysisBoxTwo, promptCopy.agentTwo.boxTwo)}
+                  ${renderAgentTextarea("maps_agent_two_box_three", copy.modules.google.mapsAnalysisBoxThree, promptCopy.agentTwo.boxThree)}
+                </div>
+                <div class="app-form-actions"><button class="app-button primary" type="submit">${escapeHtml(copy.chrome.saveAgentCopy)}</button></div>
+              </form>
+
+              <section class="app-panel">
                 ${renderSectionHeading(copy.chrome.filters, copy.chrome.filters)}
                 <div class="app-form-grid">
                   <label>
@@ -219,7 +397,8 @@ function renderMapsOps(app) {
                     </select>
                   </label>
                 </div>
-              </article>
+              </section>
+
               <section class="app-board">
                 ${MAPS_LEAD_STATUSES
                   .map((status) => {
@@ -235,6 +414,33 @@ function renderMapsOps(app) {
                   })
                   .join("")}
               </section>
+
+              <article class="app-panel">
+                ${renderSectionHeading(copy.modules.google.mapsQualified, copy.modules.google.mapsQualified)}
+                <p class="app-google-section-note">${escapeHtml(copy.modules.google.mapsQualifiedHint)}</p>
+                <div class="app-qualified-grid">
+                  ${
+                    qualifiedLeads.length
+                      ? qualifiedLeads
+                          .map(
+                            (record) => `
+                              <div class="app-list-row static">
+                                <div>
+                                  <strong>${escapeHtml(record.company_name)}</strong>
+                                  <p>${escapeHtml(record.category || "—")} • ${escapeHtml(copy.chrome.score)} ${escapeHtml(String(record.lead_score || 0))} • ${escapeHtml(copy.chrome.tier)} ${escapeHtml(record.score_tier || "D")}</p>
+                                </div>
+                                <div class="app-list-meta">
+                                  ${record.converted_qualified_lead_id ? renderBadge(`${escapeHtml(copy.chrome.alreadyConverted)}: ${escapeHtml(record.converted_qualified_lead_id)}`, "muted") : renderBadge(localizeValue(copy, record.status), "accent")}
+                                  <button class="app-button ghost" type="button" data-open-drawer="google_inbound_items:${record.id}">${escapeHtml(copy.chrome.open)}</button>
+                                </div>
+                              </div>
+                            `,
+                          )
+                          .join("")
+                      : renderEmptyState(copy)
+                  }
+                </div>
+              </article>
             `
             : `<article class="app-panel">${renderEmptyState(copy)}</article>`
         }
@@ -247,6 +453,10 @@ function renderSearchOps(app) {
   const { copy, state } = app;
   const campaigns = selectGoogleSearchCampaigns(state);
   const activeCampaign = campaigns.find((campaign) => campaign.id === state.googleCampaignId) || campaigns[0] || null;
+  const arabicCampaigns = campaigns.filter((campaign) => isArabicText(campaign.primary_keyword));
+  const englishCampaigns = campaigns.filter((campaign) => !isArabicText(campaign.primary_keyword));
+  const keywordRows = activeCampaign ? getKeywordRows(activeCampaign) : [];
+  const agentRole = activeCampaign ? getSearchAgentRole(state, activeCampaign, copy) : copy.modules.google.searchRoleFallback;
 
   return `
     <section class="app-screen">
@@ -266,65 +476,62 @@ function renderSearchOps(app) {
           <div class="app-form-actions"><button class="app-button primary" type="submit">${escapeHtml(copy.chrome.createCampaign)}</button></div>
         </form>
       </article>
+
       <article class="app-panel">
-        ${renderSectionHeading(copy.modules.google.searchCampaigns, activeCampaign ? activeCampaign.primary_keyword : copy.chrome.empty)}
-        <div class="app-tab-row">
-          ${campaigns
-            .map(
-              (campaign) => `
-                <button class="app-tab ${campaign.id === activeCampaign?.id ? "active" : ""}" type="button" data-set-google-campaign="${campaign.id}">
-                  ${escapeHtml(campaign.primary_keyword || copy.chrome.empty)}
-                </button>
-              `,
-            )
-            .join("")}
+        ${renderSectionHeading(copy.modules.google.keywordTabs, copy.modules.google.keywordTabs)}
+        <p class="app-google-section-note">${escapeHtml(copy.modules.google.keywordTabsHint)}</p>
+        <div class="app-keyword-tab-groups">
+          <div class="app-tab-group">
+            <p class="app-kicker">${escapeHtml(copy.modules.google.keywordArabicGroup)}</p>
+            <div class="app-tab-row">
+              ${arabicCampaigns.map((campaign) => renderKeywordTab(campaign, activeCampaign?.id, copy)).join("")}
+              ${Array.from({ length: Math.max(0, 5 - arabicCampaigns.length) }, () => renderKeywordPlaceholder(copy.modules.google.emptyArabicKeyword)).join("")}
+            </div>
+          </div>
+          <div class="app-tab-group">
+            <p class="app-kicker">${escapeHtml(copy.modules.google.keywordEnglishGroup)}</p>
+            <div class="app-tab-row">
+              ${englishCampaigns.map((campaign) => renderKeywordTab(campaign, activeCampaign?.id, copy)).join("")}
+              ${Array.from({ length: Math.max(0, 3 - englishCampaigns.length) }, () => renderKeywordPlaceholder(copy.modules.google.emptyEnglishKeyword)).join("")}
+            </div>
+          </div>
         </div>
       </article>
+
       ${
         activeCampaign
           ? `
-            <article class="app-panel">
-              ${renderSectionHeading(
-                localizeValue(copy, activeCampaign.campaign_status),
-                activeCampaign.primary_keyword,
-                `<button class="app-button ghost" type="button" data-open-drawer="google_rank_tasks:${activeCampaign.id}">${escapeHtml(copy.chrome.manageCampaign)}</button>`,
-              )}
-              <p class="app-card-summary">${escapeHtml(activeCampaign.summary || "—")}</p>
-              <div class="app-stats-grid compact">
-                <div class="app-stat"><span>${escapeHtml(copy.chrome.subkeywords)}</span><strong>${activeCampaign.subkeywords.length}</strong></div>
-                <div class="app-stat"><span>${escapeHtml(copy.chrome.articleIdeas)}</span><strong>${activeCampaign.article_ideas.length}</strong></div>
-                <div class="app-stat"><span>${escapeHtml(copy.chrome.published)}</span><strong>${activeCampaign.article_ideas.filter((item) => item.status === "Published").length}</strong></div>
-              </div>
-            </article>
-            <section class="app-google-grid">
-              <article class="app-panel">
-                ${renderSectionHeading(copy.chrome.subkeywords, copy.chrome.subkeywords)}
-                <div class="app-list">
-                  ${activeCampaign.subkeywords.length ? activeCampaign.subkeywords.map((item) => `<div class="app-list-row static"><strong>${escapeHtml(item)}</strong></div>`).join("") : renderEmptyState(copy)}
-                </div>
-              </article>
-              <article class="app-panel">
-                ${renderSectionHeading(copy.chrome.articleIdeas, copy.chrome.articleIdeas)}
-                <div class="app-list">
-                  ${
-                    activeCampaign.article_ideas.length
-                      ? activeCampaign.article_ideas
-                          .map(
-                            (item) => `
-                              <div class="app-list-row static">
-                                <div>
-                                  <strong>${escapeHtml(item.title)}</strong>
-                                </div>
-                                <div class="app-list-meta">${renderBadge(localizeValue(copy, item.status), "muted")}</div>
-                              </div>
-                            `,
-                          )
-                          .join("")
-                      : renderEmptyState(copy)
-                  }
-                </div>
-              </article>
+            <form class="app-panel" data-edit-record="google_rank_tasks:${activeCampaign.id}">
+              ${renderSectionHeading(copy.modules.google.searchAgent, activeCampaign.primary_keyword, renderBadge(localizeValue(copy, activeCampaign.campaign_status), "muted"))}
+              <p class="app-google-section-note">${escapeHtml(copy.modules.google.searchAgentHint)}</p>
+              ${renderAgentTextarea("search_agent_role", copy.modules.google.searchRoleBox, agentRole, 10)}
+              <div class="app-form-actions"><button class="app-button primary" type="submit">${escapeHtml(copy.chrome.saveAgentCopy)}</button></div>
+            </form>
+
+            <section class="app-google-results-grid three-up">
+              ${renderImportCard(copy.modules.google.searchAgent, copy.modules.google.searchImportLaneStrategy, `search:${activeCampaign.id}:keyword_strategy`, activeCampaign.keyword_strategy_result_json, copy)}
+              ${renderImportCard(copy.modules.google.searchAgent, copy.modules.google.searchImportLaneCluster, `search:${activeCampaign.id}:subkeyword_cluster`, activeCampaign.subkeyword_cluster_result_json, copy)}
+              ${renderImportCard(copy.modules.google.searchAgent, copy.modules.google.searchImportLanePlanner, `search:${activeCampaign.id}:article_planner`, activeCampaign.article_planner_result_json, copy)}
             </section>
+
+            <form class="app-panel app-keyword-workbench" data-edit-record="google_rank_tasks:${activeCampaign.id}" data-search-keyword-workbench="true">
+              ${renderSectionHeading(copy.modules.google.keywordWorkbench, activeCampaign.primary_keyword, `<button class="app-button ghost" type="button" data-open-drawer="google_rank_tasks:${activeCampaign.id}">${escapeHtml(copy.chrome.manageCampaign)}</button>`)}
+              <p class="app-google-section-note">${escapeHtml(copy.modules.google.keywordWorkbenchHint)}</p>
+              <div class="app-form-grid">
+                <label><span>${escapeHtml(copy.forms.primaryKeyword)}</span><input name="primary_keyword" value="${escapeHtml(activeCampaign.primary_keyword)}" /></label>
+                <label><span>${escapeHtml(copy.forms.country)}</span><input name="country" value="${escapeHtml(activeCampaign.country)}" /></label>
+                <label><span>${escapeHtml(copy.forms.targetIntent)}</span><input name="target_intent" value="${escapeHtml(activeCampaign.target_intent)}" /></label>
+                <label><span>${escapeHtml(copy.forms.targetPage)}</span><input name="target_page" value="${escapeHtml(activeCampaign.target_page)}" /></label>
+                <label class="wide"><span>${escapeHtml(copy.chrome.summary)}</span><input name="summary" value="${escapeHtml(activeCampaign.summary || "")}" /></label>
+              </div>
+              <textarea class="app-hidden-field" data-hidden-subkeywords name="subkeywords">${escapeHtml(toTextBlock(activeCampaign.subkeywords))}</textarea>
+              <textarea class="app-hidden-field" data-hidden-title-pairs name="article_title_pairs_json">${escapeHtml(activeCampaign.article_title_pairs_json || "[]")}</textarea>
+              <textarea class="app-hidden-field" data-hidden-article-ideas>${escapeHtml(toJsonBlock(activeCampaign.article_ideas))}</textarea>
+              <div class="app-keyword-rows">
+                ${keywordRows.map((row) => renderKeywordWorkbenchRow(row, copy)).join("")}
+              </div>
+              <div class="app-form-actions"><button class="app-button primary" type="submit">${escapeHtml(copy.chrome.editKeywordSet)}</button></div>
+            </form>
           `
           : `<article class="app-panel">${renderEmptyState(copy)}</article>`
       }

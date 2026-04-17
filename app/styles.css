@@ -399,3 +399,97 @@ button, input, textarea, select { font: inherit; }
   .app-topbar { align-items: flex-start; flex-direction: column; }
   .app-form-grid, .app-detail-grid, .app-stats-grid { grid-template-columns: 1fr; }
 }
+
+.app-google-section-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.app-agent-copy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.app-agent-copy-box {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.app-agent-copy-box textarea,
+.app-keyword-cell input {
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.18);
+  color: var(--text);
+  padding: 12px 14px;
+}
+
+.app-agent-copy-box textarea {
+  min-height: 170px;
+  resize: vertical;
+}
+
+.app-google-results-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.app-google-results-grid.three-up {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.app-result-card {
+  display: grid;
+  gap: 14px;
+}
+
+.app-keyword-tab-groups,
+.app-qualified-grid,
+.app-keyword-workbench,
+.app-keyword-rows,
+.app-tab-group {
+  display: grid;
+  gap: 14px;
+}
+
+.app-tab-placeholder {
+  opacity: 0.62;
+  cursor: default;
+}
+
+.app-keyword-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.9fr) repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.app-keyword-cell {
+  display: grid;
+  gap: 8px;
+}
+
+.app-keyword-cell span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app-hidden-field {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .app-agent-copy-grid,
+  .app-google-results-grid,
+  .app-google-results-grid.three-up,
+  .app-keyword-row {
+    grid-template-columns: 1fr;
+  }
+}

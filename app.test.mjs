@@ -294,12 +294,13 @@ test("live mode supports POST and PATCH for Google collections with version head
         "Content-Type": "application/json",
         "X-User": "app-test",
       },
-      body: JSON.stringify({ status: "Shortlist Pending" }),
+      body: JSON.stringify({ status: "Shortlist Pending", maps_agent_one_box_one: "Custom maps agent copy" }),
     });
     const missionPayload = await patchedMission.json();
 
     assert.equal(patchedMission.status, 200);
     assert.equal(missionPayload.google_maps_missions.find((item) => item.id === "gm-ksa-service").status, "Shortlist Pending");
+    assert.equal(missionPayload.google_maps_missions.find((item) => item.id === "gm-ksa-service").maps_agent_one_box_one, "Custom maps agent copy");
 
     const patchedLead = await fetch(`${baseUrl}/google_inbound_items/gmlead-1`, {
       method: "PATCH",
@@ -320,12 +321,13 @@ test("live mode supports POST and PATCH for Google collections with version head
         "Content-Type": "application/json",
         "X-User": "app-test",
       },
-      body: JSON.stringify({ campaign_status: "Cluster Ready" }),
+      body: JSON.stringify({ campaign_status: "Cluster Ready", article_title_pairs_json: JSON.stringify([{ subkeyword: "saudi seo", primary_title: "Title 1", secondary_title: "Title 2" }]) }),
     });
     const campaignPayload = await patchedCampaign.json();
 
     assert.equal(patchedCampaign.status, 200);
     assert.equal(campaignPayload.google_rank_tasks.find((item) => item.id === "gseo-2").campaign_status, "Cluster Ready");
+    assert.equal(campaignPayload.google_rank_tasks.find((item) => item.id === "gseo-2").article_title_pairs_json, JSON.stringify([{ subkeyword: "saudi seo", primary_title: "Title 1", secondary_title: "Title 2" }]));
     assert.ok(Number(patchedCampaign.headers.get("X-State-Version")) > Number(createdTemplate.headers.get("X-State-Version")));
   } finally {
     await app.stop();
