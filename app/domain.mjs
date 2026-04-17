@@ -375,7 +375,7 @@ function getQualifiedLeadCreateErrors(state, draft) {
   return errors;
 }
 
-function getOpportunityCreateErrorsV2(state, draft) {
+function getOpportunityCreateErrors(state, draft) {
   const errors = [
     ...getRequiredErrors("opportunities", draft),
     ...validateOpportunityTransition(draft, draft.current_stage),
@@ -401,7 +401,7 @@ function getCreateErrors(collection, state, draft) {
     return getQualifiedLeadCreateErrors(state, draft);
   }
   if (normalizedCollection === "opportunities") {
-    return getOpportunityCreateErrorsV2(state, draft);
+    return getOpportunityCreateErrors(state, draft);
   }
 
   const errors = getRequiredErrors(normalizedCollection, draft);

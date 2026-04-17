@@ -8,8 +8,8 @@
   </head>
   <body>
     <script>
-      const targetPath = window.location.pathname.replace(/\/v2(?=\/|1000 4 24 27 30 46 100 1000 1001/, "");
-      window.location.replace(``);
+      const targetPath = window.location.pathname.replace(/\/v2(?=\/|$)/, "");
+      window.location.replace(`${targetPath}${window.location.search}${window.location.hash}`);
     </script>
     <p>Redirecting to <a href="../../">MyCalls</a>...</p>
   </body>

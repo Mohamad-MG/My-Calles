@@ -293,6 +293,10 @@ test("google tab routing normalizes invalid values and preserves rank-ops routes
     "/My-Calles/en/google/?tab=rank-ops",
   );
   assert.equal(
+    routeForPath("google", { basePath: "/My-Calles", locale: "ar", googleTab: "rank-ops" }),
+    "/My-Calles/ar/google/?tab=rank-ops",
+  );
+  assert.equal(
     routeForPath("google", { basePath: "/My-Calles", locale: "ar", googleTab: "unknown" }),
     "/My-Calles/ar/google/",
   );
@@ -311,8 +315,8 @@ test("root locale entrypoints render the canonical unversioned shell", async () 
     assert.match(rootHtml, /en\//);
     assert.match(englishHtml, /bootstrapApp/);
     assert.match(arabicHtml, /bootstrapApp/);
-    assert.doesNotMatch(englishHtml, /MyCalls V2|Channel Ops V2|>V2</);
-    assert.doesNotMatch(arabicHtml, /نظام التشغيل V2|تشغيل القنوات V2|>V2</);
+    assert.doesNotMatch(englishHtml, /MyCalls\s+V\d|Channel Ops\s+V\d|>V\d</);
+    assert.doesNotMatch(arabicHtml, /نظام التشغيل\s+V\d|تشغيل القنوات\s+V\d|>V\d</);
   } finally {
     await app.stop();
   }
@@ -342,13 +346,13 @@ test("legacy compatibility frontend routes redirect to canonical localized route
   const { app, baseUrl } = await startTestServer();
   try {
     const home = await fetch(`${baseUrl}/en/v2/`, { redirect: "manual" });
-    const workspace = await fetch(`${baseUrl}/ar/v2/google/`, { redirect: "manual" });
+    const workspace = await fetch(`${baseUrl}/ar/v2/google/?tab=rank-ops`, { redirect: "manual" });
     const opportunity = await fetch(`${baseUrl}/en/v2/opportunities/opp-1/`, { redirect: "manual" });
 
     assert.equal(home.status, 302);
     assert.equal(home.headers.get("location"), "/en/");
     assert.equal(workspace.status, 302);
-    assert.equal(workspace.headers.get("location"), "/ar/google/");
+    assert.equal(workspace.headers.get("location"), "/ar/google/?tab=rank-ops");
     assert.equal(opportunity.status, 302);
     assert.equal(opportunity.headers.get("location"), "/en/opportunities/opp-1/");
   } finally {
