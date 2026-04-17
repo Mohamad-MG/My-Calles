@@ -21,7 +21,7 @@ function renderResume(summary, copy) {
   const record = summary.resume_item;
   return `
     <div class="app-resume-box">
-      <strong>${escapeHtml(record.company_name || record.profile_name || record.keyword || record.contact_name || "Resume item")}</strong>
+      <strong>${escapeHtml(record.company_name || record.profile_name || record.primary_keyword || record.keyword || record.title || record.contact_name || "Resume item")}</strong>
       <p>${escapeHtml(record.summary || record.next_step || "—")}</p>
       <small>${escapeHtml(copy.chrome.nextStep)}: ${escapeHtml(record.next_step || "—")} • ${formatShortDate(record.next_step_date, copy.meta.lang)}</small>
     </div>

@@ -172,12 +172,79 @@ function createAppServer({ rootDir = __dirname, dataDir = path.join(__dirname, "
         return;
       }
 
+      let importMatch = url.pathname.match(/^\/google_maps_missions\/([^/]+)\/import-search$/);
+      if (request.method === "POST" && importMatch) {
+        kind = "mutation";
+        const payload = await readJsonBody(request);
+        conflictDetected = knownVersion > 0 && knownVersion !== stateStore.getVersion();
+        const state = await stateStore.importMapsSearchResults(importMatch[1], payload, actor);
+        jsonResponseWithHeaders(response, 200, state, {
+          "X-State-Version": String(stateStore.getVersion()),
+          "X-Conflict-Detected": conflictDetected ? "1" : "0",
+        });
+        return;
+      }
+
+      importMatch = url.pathname.match(/^\/google_maps_missions\/([^/]+)\/import-shortlist$/);
+      if (request.method === "POST" && importMatch) {
+        kind = "mutation";
+        const payload = await readJsonBody(request);
+        conflictDetected = knownVersion > 0 && knownVersion !== stateStore.getVersion();
+        const state = await stateStore.importMapsShortlistResults(importMatch[1], payload, actor);
+        jsonResponseWithHeaders(response, 200, state, {
+          "X-State-Version": String(stateStore.getVersion()),
+          "X-Conflict-Detected": conflictDetected ? "1" : "0",
+        });
+        return;
+      }
+
+      importMatch = url.pathname.match(/^\/google_rank_tasks\/([^/]+)\/import-keyword-strategy$/);
+      if (request.method === "POST" && importMatch) {
+        kind = "mutation";
+        const payload = await readJsonBody(request);
+        conflictDetected = knownVersion > 0 && knownVersion !== stateStore.getVersion();
+        const state = await stateStore.importKeywordStrategy(importMatch[1], payload, actor);
+        jsonResponseWithHeaders(response, 200, state, {
+          "X-State-Version": String(stateStore.getVersion()),
+          "X-Conflict-Detected": conflictDetected ? "1" : "0",
+        });
+        return;
+      }
+
+      importMatch = url.pathname.match(/^\/google_rank_tasks\/([^/]+)\/import-subkeyword-cluster$/);
+      if (request.method === "POST" && importMatch) {
+        kind = "mutation";
+        const payload = await readJsonBody(request);
+        conflictDetected = knownVersion > 0 && knownVersion !== stateStore.getVersion();
+        const state = await stateStore.importSubkeywordCluster(importMatch[1], payload, actor);
+        jsonResponseWithHeaders(response, 200, state, {
+          "X-State-Version": String(stateStore.getVersion()),
+          "X-Conflict-Detected": conflictDetected ? "1" : "0",
+        });
+        return;
+      }
+
+      importMatch = url.pathname.match(/^\/google_rank_tasks\/([^/]+)\/import-article-planner$/);
+      if (request.method === "POST" && importMatch) {
+        kind = "mutation";
+        const payload = await readJsonBody(request);
+        conflictDetected = knownVersion > 0 && knownVersion !== stateStore.getVersion();
+        const state = await stateStore.importArticlePlan(importMatch[1], payload, actor);
+        jsonResponseWithHeaders(response, 200, state, {
+          "X-State-Version": String(stateStore.getVersion()),
+          "X-Conflict-Detected": conflictDetected ? "1" : "0",
+        });
+        return;
+      }
+
       if (request.method === "POST" && /^\/[^/]+$/.test(url.pathname) && url.pathname !== "/opportunities") {
         kind = "mutation";
         const [, entity] = url.pathname.split("/");
         const allowedEntities = new Set([
           "whatsapp_items",
           "linkedin_prospects",
+          "google_prompt_templates",
+          "google_maps_missions",
           "google_inbound_items",
           "google_rank_tasks",
           "qualified_leads",
@@ -204,20 +271,22 @@ function createAppServer({ rootDir = __dirname, dataDir = path.join(__dirname, "
           const allowedEntities = new Set([
             "whatsapp_items",
             "linkedin_prospects",
+            "google_prompt_templates",
+            "google_maps_missions",
             "google_inbound_items",
             "google_rank_tasks",
             "qualified_leads",
             "opportunities",
-        ]);
-        if (allowedEntities.has(entity)) {
-          const payload = await readJsonBody(request);
-          conflictDetected = knownVersion > 0 && knownVersion !== stateStore.getVersion();
-          const state = await stateStore.patchEntity(entity, id, payload, actor);
-          jsonResponseWithHeaders(response, 200, state, {
-            "X-State-Version": String(stateStore.getVersion()),
-            "X-Conflict-Detected": conflictDetected ? "1" : "0",
-          });
-          return;
+          ]);
+          if (allowedEntities.has(entity)) {
+            const payload = await readJsonBody(request);
+            conflictDetected = knownVersion > 0 && knownVersion !== stateStore.getVersion();
+            const state = await stateStore.patchEntity(entity, id, payload, actor);
+            jsonResponseWithHeaders(response, 200, state, {
+              "X-State-Version": String(stateStore.getVersion()),
+              "X-Conflict-Detected": conflictDetected ? "1" : "0",
+            });
+            return;
           }
         }
       }

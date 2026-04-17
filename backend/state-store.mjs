@@ -2,60 +2,11 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
-  createOpportunityFromQualifiedLead,
-  createQualifiedLeadFromSource,
-  createSeedData,
-  getCreateErrors,
-  getRequiredErrors,
-  getSourceRecord,
-  getStatusField,
-  hasDuplicateOpportunity,
-  normalizeState,
-  resolveCollection,
-  SERVICE_CONFIDENCE_OPTIONS,
-  SERVICE_OPTIONS,
-  validateStatusPatch,
-} from "../app/domain.mjs";
-
-function nowIsoDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function clone(value) {
-  return structuredClone(value);
-}
-
-function withStateMeta(state, meta = {}) {
-  return {
-    ...state,
-    _meta: {
-      version: meta.version || 1,
-      last_mutation_at: meta.lastMutationAt || null,
-      last_mutation_by: meta.lastMutationBy || null,
-    },
-  };
-}
-
-function buildRecentActivity(records = []) {
-  return records
-    .slice(-6)
-    .reverse()
-    .map((entry) => ({
-      id: `${entry.entity}-${entry.id}-${entry.state_version}`,
-      entity: entry.entity,
-      action: entry.action,
-      record_id: entry.id,
-      timestamp: entry.timestamp,
-      summary:
-        entry.after?.summary ||
-        entry.after?.company_name ||
-        entry.after?.profile_name ||
-        entry.after?.keyword ||
-        entry.after?.pain_summary ||
-        entry.after?.next_step ||
-        entry.id,
-    }));
-}
+  applyLocalRequest,
+  buildRecentActivity,
+  createEnvelope,
+  getPublicStateFromEnvelope,
+} from "../app/state-engine.mjs";
 
 class StateStore {
   constructor({ dataDir }) {
@@ -63,8 +14,7 @@ class StateStore {
     this.stateFile = path.join(dataDir, "dashboard-state.json");
     this.auditFile = path.join(dataDir, "audit-log.jsonl");
     this.eventsFile = path.join(dataDir, "observability-log.jsonl");
-    this.state = null;
-    this.recentActivity = [];
+    this.envelope = null;
     this.metrics = {
       requests: 0,
       failures: 0,
@@ -80,23 +30,19 @@ class StateStore {
 
   async init() {
     await mkdir(this.dataDir, { recursive: true });
-    this.state = await this.#loadState();
-    this.recentActivity = await this.#loadRecentActivity();
+    this.envelope = await this.#loadEnvelope();
     return this;
   }
 
   async getState() {
-    if (!this.state) {
+    if (!this.envelope) {
       await this.init();
     }
-    return {
-      ...clone(this.state),
-      recent_activity: clone(this.recentActivity),
-    };
+    return getPublicStateFromEnvelope(this.envelope);
   }
 
   getVersion() {
-    return Number(this.state?._meta?.version || 1);
+    return Number(this.envelope?.state?._meta?.version || 1);
   }
 
   getObservabilitySnapshot() {
@@ -157,234 +103,140 @@ class StateStore {
   }
 
   async patchEntity(entity, id, patch, actor = "system") {
-    const timestamp = nowIsoDate();
-    const collection = resolveCollection(entity);
-    const currentState = await this.getState();
-    const nextState = clone(currentState);
-    const index = nextState[collection].findIndex((item) => item.id === id);
-
-    if (index < 0) {
-      throw new Error("Record not found.");
-    }
-
-    const before = nextState[collection][index];
-    const after = {
-      ...before,
-      ...patch,
-      updated_at: timestamp,
-      updated_by: actor,
-    };
-
-    const statusField = getStatusField(collection);
-    if (statusField in patch) {
-      validateStatusPatch(collection, before, after);
-    }
-
-    const errors =
-      collection === "opportunities"
-        ? getCreateErrors(collection, currentState, after).filter(
-            (error) => !error.includes("already exists") && !error.includes("only be created"),
-          )
-        : getRequiredErrors(collection, after);
-
-    if (collection === "qualified_leads") {
-      if (!SERVICE_OPTIONS.includes(after.recommended_service)) {
-        errors.push('Field "recommended_service" is invalid.');
-      }
-      if (!SERVICE_CONFIDENCE_OPTIONS.includes(after.recommended_service_confidence)) {
-        errors.push('Field "recommended_service_confidence" is invalid.');
-      }
-    }
-
-    if (errors.length) {
-      throw new Error(errors.join(" "));
-    }
-
-    nextState[collection][index] = after;
-    await this.#commit({
-      action: "patch",
-      entity: collection,
-      id,
-      before,
-      after,
-      state: nextState,
+    const result = applyLocalRequest(this.envelope, {
+      path: `/${entity}/${id}`,
+      method: "PATCH",
+      body: patch,
       actor,
-      timestamp,
     });
-    return await this.getState();
+    await this.#persistMutation(result, true);
+    return result.payload;
   }
 
   async createEntity(entity, values, actor = "system") {
-    const timestamp = nowIsoDate();
-    const collection = resolveCollection(entity);
-    const currentState = await this.getState();
-    const existing = currentState[collection].find((item) => item.id === values.id);
-    if (existing) {
-      return {
-        state: clone(currentState),
-        record: clone(existing),
-        created: false,
-        duplicate: true,
-      };
-    }
-
-    const draft = {
-      ...values,
-      created_at: values.created_at || timestamp,
-      updated_at: timestamp,
-      updated_by: actor,
-    };
-    const errors = getCreateErrors(collection, currentState, draft);
-    if (errors.length) {
-      throw new Error(errors.join(" "));
-    }
-
-    const nextState = clone(currentState);
-    nextState[collection].unshift(draft);
-    await this.#commit({
-      action: "create",
-      entity: collection,
-      id: draft.id,
-      before: null,
-      after: draft,
-      state: nextState,
+    const result = applyLocalRequest(this.envelope, {
+      path: `/${entity}`,
+      method: "POST",
+      body: values,
       actor,
-      timestamp,
     });
-
+    await this.#persistMutation(result, Boolean(result.auditEntry));
     return {
-      state: await this.getState(),
-      record: clone(draft),
-      created: true,
-      duplicate: false,
+      state: result.payload,
+      record: result.record || null,
+      created: Boolean(result.created),
+      duplicate: Boolean(result.duplicate),
     };
   }
 
   async convertQualifiedLead(payload, actor = "system") {
-    const timestamp = nowIsoDate();
-    const currentState = await this.getState();
-    const { source_entity, source_id } = payload;
-    const sourceRecord = getSourceRecord(currentState, source_entity, source_id);
-    if (!sourceRecord) {
-      throw new Error("Source record not found.");
-    }
-
-    const qualifiedLead = createQualifiedLeadFromSource(
-      sourceRecord,
-      source_entity,
-      {
-        id: payload.id,
-        pain_summary: payload.pain_summary,
-        qualification_note: payload.qualification_note,
-        recommended_service: payload.recommended_service,
-        recommended_service_confidence: payload.recommended_service_confidence,
-        handoff_status: payload.handoff_status || "New",
-        owner: payload.owner || sourceRecord.owner,
-        notes: payload.notes || "",
-      },
+    const result = applyLocalRequest(this.envelope, {
+      path: "/conversions/qualified-leads",
+      method: "POST",
+      body: payload,
       actor,
-      timestamp,
-    );
-
-    const errors = getCreateErrors("qualified_leads", currentState, qualifiedLead);
-    if (errors.length) {
-      throw new Error(errors.join(" "));
-    }
-
-    const nextState = clone(currentState);
-    const collection = resolveCollection(source_entity);
-    const index = nextState[collection].findIndex((item) => item.id === source_id);
-    nextState[collection][index] = {
-      ...nextState[collection][index],
-      converted_qualified_lead_id: qualifiedLead.id,
-      updated_at: timestamp,
-      updated_by: actor,
-    };
-    nextState.qualified_leads.unshift(qualifiedLead);
-
-    await this.#commit({
-      action: "convert-to-qualified-lead",
-      entity: "qualified_leads",
-      id: qualifiedLead.id,
-      before: sourceRecord,
-      after: qualifiedLead,
-      state: nextState,
-      actor,
-      timestamp,
     });
-
-    return await this.getState();
+    await this.#persistMutation(result, true);
+    return result.payload;
   }
 
   async createOpportunityFromQualifiedLead(payload, actor = "system") {
-    const timestamp = nowIsoDate();
-    const currentState = await this.getState();
-    const qualifiedLead = currentState.qualified_leads.find((item) => item.id === payload.qualified_lead_id);
-    if (!qualifiedLead) {
-      throw new Error("Opportunity can only be created from a qualified lead.");
-    }
-    if (qualifiedLead.handoff_status !== "Ready for Opportunity") {
-      throw new Error("Qualified lead must be Ready for Opportunity first.");
-    }
-    if (qualifiedLead.converted_opportunity_id || hasDuplicateOpportunity(currentState, qualifiedLead.id)) {
-      throw new Error("An opportunity already exists for this qualified lead.");
-    }
-
-    const draft = createOpportunityFromQualifiedLead(qualifiedLead, payload, actor, timestamp);
-    const errors = getCreateErrors("opportunities", currentState, draft);
-    if (errors.length) {
-      throw new Error(errors.join(" "));
-    }
-
-    const nextState = clone(currentState);
-    nextState.opportunities.unshift(draft);
-    const handoffIndex = nextState.qualified_leads.findIndex((item) => item.id === qualifiedLead.id);
-    nextState.qualified_leads[handoffIndex] = {
-      ...nextState.qualified_leads[handoffIndex],
-      converted_opportunity_id: draft.id,
-      updated_at: timestamp,
-      updated_by: actor,
-    };
-
-    await this.#commit({
-      action: "converted-to-opportunity",
-      entity: "opportunities",
-      id: draft.id,
-      before: qualifiedLead,
-      after: draft,
-      state: nextState,
+    const result = applyLocalRequest(this.envelope, {
+      path: "/opportunities",
+      method: "POST",
+      body: payload,
       actor,
-      timestamp,
     });
-
-    return await this.getState();
+    await this.#persistMutation(result, true);
+    return result.payload;
   }
 
   async restoreSeed(actor = "system", reason = "restore-seed") {
-    const timestamp = nowIsoDate();
-    const nextState = normalizeState(createSeedData(), actor, timestamp);
-    const beforeState = await this.getState();
-    await this.#commit({
-      action: reason,
-      entity: "state",
-      id: "dashboard",
-      before: beforeState,
-      after: nextState,
-      state: nextState,
+    const result = applyLocalRequest(this.envelope, {
+      path: "/state/restore-seed",
+      method: "POST",
+      body: { reason },
       actor,
-      timestamp,
     });
-    return await this.getState();
+    if (result.auditEntry) {
+      result.auditEntry.action = reason;
+    }
+    await this.#persistMutation(result, true);
+    return result.payload;
   }
 
-  async #loadState() {
+  async importMapsSearchResults(missionId, payload, actor = "system") {
+    const result = applyLocalRequest(this.envelope, {
+      path: `/google_maps_missions/${missionId}/import-search`,
+      method: "POST",
+      body: payload,
+      actor,
+    });
+    await this.#persistMutation(result, true);
+    return result.payload;
+  }
+
+  async importMapsShortlistResults(missionId, payload, actor = "system") {
+    const result = applyLocalRequest(this.envelope, {
+      path: `/google_maps_missions/${missionId}/import-shortlist`,
+      method: "POST",
+      body: payload,
+      actor,
+    });
+    await this.#persistMutation(result, true);
+    return result.payload;
+  }
+
+  async importKeywordStrategy(campaignId, payload, actor = "system") {
+    const result = applyLocalRequest(this.envelope, {
+      path: `/google_rank_tasks/${campaignId}/import-keyword-strategy`,
+      method: "POST",
+      body: payload,
+      actor,
+    });
+    await this.#persistMutation(result, true);
+    return result.payload;
+  }
+
+  async importSubkeywordCluster(campaignId, payload, actor = "system") {
+    const result = applyLocalRequest(this.envelope, {
+      path: `/google_rank_tasks/${campaignId}/import-subkeyword-cluster`,
+      method: "POST",
+      body: payload,
+      actor,
+    });
+    await this.#persistMutation(result, true);
+    return result.payload;
+  }
+
+  async importArticlePlan(campaignId, payload, actor = "system") {
+    const result = applyLocalRequest(this.envelope, {
+      path: `/google_rank_tasks/${campaignId}/import-article-planner`,
+      method: "POST",
+      body: payload,
+      actor,
+    });
+    await this.#persistMutation(result, true);
+    return result.payload;
+  }
+
+  async #loadEnvelope() {
+    const state = await this.#loadStateFile();
+    const auditRecords = await this.#loadAuditRecords();
+    return createEnvelope({
+      state,
+      audit_records: auditRecords,
+    });
+  }
+
+  async #loadStateFile() {
     try {
       const serialized = await readFile(this.stateFile, "utf8");
-      return normalizeState(JSON.parse(serialized));
+      return JSON.parse(serialized);
     } catch {
-      const initialState = normalizeState(createSeedData());
-      await writeFile(this.stateFile, JSON.stringify(initialState, null, 2));
-      return initialState;
+      const seedEnvelope = createEnvelope();
+      await writeFile(this.stateFile, JSON.stringify(seedEnvelope.state, null, 2));
+      return seedEnvelope.state;
     }
   }
 
@@ -401,39 +253,20 @@ class StateStore {
     }
   }
 
-  async #loadRecentActivity() {
-    const records = await this.#loadAuditRecords();
-    return buildRecentActivity(records);
-  }
+  async #persistMutation(result, appendAudit = true) {
+    const previousEnvelope = this.envelope;
+    this.envelope = result.envelope;
 
-  async #commit({ action, entity, id, before, after, state, actor, timestamp }) {
-    const previousState = clone(this.state);
-    const nextVersion = Number(this.state?._meta?.version || 1) + 1;
-    const committedState = withStateMeta(normalizeState(state, actor, timestamp), {
-      version: nextVersion,
-      lastMutationAt: timestamp,
-      lastMutationBy: actor,
-    });
-    this.state = committedState;
-    await writeFile(this.stateFile, JSON.stringify(committedState, null, 2));
-    const auditRecord = {
-      action,
-      entity,
-      id,
-      before,
-      after,
-      timestamp,
-      user: actor,
-      state_version: nextVersion,
-    };
     try {
-      await appendFile(this.auditFile, `${JSON.stringify(auditRecord)}\n`);
+      await writeFile(this.stateFile, JSON.stringify(this.envelope.state, null, 2));
+      if (appendAudit && result.auditEntry) {
+        await appendFile(this.auditFile, `${JSON.stringify(result.auditEntry)}\n`);
+      }
     } catch (error) {
-      this.state = previousState;
-      await writeFile(this.stateFile, JSON.stringify(previousState, null, 2));
+      this.envelope = previousEnvelope;
+      await writeFile(this.stateFile, JSON.stringify(previousEnvelope.state, null, 2));
       throw error;
     }
-    this.recentActivity = buildRecentActivity([...(await this.#loadAuditRecords())]);
   }
 }
 

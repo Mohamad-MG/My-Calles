@@ -2,20 +2,35 @@ import { createId, getStatusField } from "./domain.mjs";
 import { getLocaleConfig } from "./i18n.mjs";
 import { renderHome } from "./modules/home.mjs";
 import { renderHandoff, renderHandoffDrawer } from "./modules/handoff.mjs";
-import { renderGoogleDrawer, renderGoogleShell } from "./modules/google-shell.mjs";
+import {
+  buildPromptPreview,
+  findTemplate,
+  renderGoogleDrawer,
+  renderGoogleShell,
+  selectGoogleMapsMissions,
+  selectGoogleSearchCampaigns,
+} from "./modules/google-shell.mjs";
 import { renderLinkedIn, renderLinkedInDrawer } from "./modules/linkedin.mjs";
 import { getOpportunityById, renderOpportunityDetail } from "./modules/opportunities.mjs";
 import { renderWhatsApp, renderWhatsAppDrawer } from "./modules/whatsapp.mjs";
 import { createSessionId, fetchState, getRuntimeBasePath, sendRequest } from "./shared-state.mjs";
 import { escapeHtml, localizeValue } from "./shared-ui.mjs";
 
-const GOOGLE_TABS = new Set(["inbound", "rank-ops"]);
+const GOOGLE_TABS = new Set(["maps-ops", "search-ops"]);
+const SPECIAL_DRAWER_ENTITIES = new Set(["google_prompt_templates_library"]);
 
 const state = {
   locale: "en",
   copy: getLocaleConfig("en"),
   screenKey: "home",
-  googleTab: "inbound",
+  googleTab: "maps-ops",
+  googleMissionId: "",
+  googleCampaignId: "",
+  googleFilters: {
+    city: "all",
+    category: "all",
+    tier: "all",
+  },
   data: null,
   version: 0,
   basePath: "",
@@ -31,7 +46,9 @@ const state = {
 let elements = null;
 
 function normalizeGoogleTab(tab) {
-  return GOOGLE_TABS.has(tab) ? tab : "inbound";
+  if (tab === "inbound") return "maps-ops";
+  if (tab === "rank-ops") return "search-ops";
+  return GOOGLE_TABS.has(tab) ? tab : "maps-ops";
 }
 
 function getGoogleTabFromSearch(search = window.location.search) {
@@ -46,7 +63,7 @@ function routeForPath(screenKey, { basePath = "", locale = "en", opportunityId =
   if (screenKey === "linkedin") return `${base}/linkedin/`;
   if (screenKey === "google") {
     const tab = normalizeGoogleTab(googleTab);
-    return `${base}/google/${tab === "rank-ops" ? "?tab=rank-ops" : ""}`;
+    return `${base}/google/${tab === "search-ops" ? "?tab=search-ops" : ""}`;
   }
   if (screenKey === "handoff") return `${base}/handoff/`;
   if (screenKey === "opportunity-detail") return `${base}/opportunities/${opportunityId}/`;
@@ -68,18 +85,35 @@ function getOpportunityIdFromPath() {
 }
 
 function findRecord(entity, id) {
+  if (SPECIAL_DRAWER_ENTITIES.has(entity)) return null;
   return (state.data?.[entity] || []).find((item) => item.id === id) || null;
 }
 
 function getDrawerContent(entity, record) {
-  if (!record) return `<div class="app-empty">${escapeHtml(state.copy.chrome.empty)}</div>`;
-  if (entity === "whatsapp_items") return renderWhatsAppDrawer({ state, copy: state.copy }, record);
-  if (entity === "linkedin_prospects") return renderLinkedInDrawer({ state, copy: state.copy }, record);
-  if (entity === "google_inbound_items" || entity === "google_rank_tasks") {
+  if (entity === "google_prompt_templates_library") {
+    return renderGoogleDrawer({ state, copy: state.copy }, entity, null);
+  }
+  if (entity === "whatsapp_items" && record) return renderWhatsAppDrawer({ state, copy: state.copy }, record);
+  if (entity === "linkedin_prospects" && record) return renderLinkedInDrawer({ state, copy: state.copy }, record);
+  if ((entity === "google_maps_missions" || entity === "google_inbound_items" || entity === "google_rank_tasks") && record) {
     return renderGoogleDrawer({ state, copy: state.copy }, entity, record);
   }
-  if (entity === "qualified_leads") return renderHandoffDrawer({ state, copy: state.copy }, record);
+  if (entity === "qualified_leads" && record) return renderHandoffDrawer({ state, copy: state.copy }, record);
   return `<div class="app-empty">${escapeHtml(state.copy.chrome.empty)}</div>`;
+}
+
+function getDrawerTitle(entity, record) {
+  if (entity === "google_prompt_templates_library") return state.copy.modules.google.templates;
+  return (
+    record?.company_name ||
+    record?.profile_name ||
+    record?.primary_keyword ||
+    record?.keyword ||
+    record?.title ||
+    record?.name ||
+    record?.pain_summary ||
+    state.copy.chrome.open
+  );
 }
 
 function renderNav() {
@@ -144,7 +178,7 @@ function renderDrawer() {
     return;
   }
   const record = findRecord(entity, id);
-  elements.drawerTitle.textContent = record?.company_name || record?.profile_name || record?.keyword || record?.pain_summary || state.copy.chrome.open;
+  elements.drawerTitle.textContent = getDrawerTitle(entity, record);
   elements.drawerBody.innerHTML = getDrawerContent(entity, record);
 }
 
@@ -169,11 +203,23 @@ function renderApp() {
   renderDrawer();
 }
 
+function syncGoogleSelections() {
+  const missions = selectGoogleMapsMissions(state);
+  const campaigns = selectGoogleSearchCampaigns(state);
+  if (!missions.some((mission) => mission.id === state.googleMissionId)) {
+    state.googleMissionId = missions[0]?.id || "";
+  }
+  if (!campaigns.some((campaign) => campaign.id === state.googleCampaignId)) {
+    state.googleCampaignId = campaigns[0]?.id || "";
+  }
+}
+
 async function refreshState(message = "") {
   const remote = await fetchState({ sessionId: state.sessionId });
   state.data = remote.payload;
   state.version = remote.version;
   state.notice = message;
+  syncGoogleSelections();
   renderApp();
 }
 
@@ -201,12 +247,26 @@ function setGoogleTab(tab, historyMode = "push") {
   const currentUrl = `${window.location.pathname}${window.location.search}`;
 
   state.googleTab = nextTab;
-
   if (currentUrl !== nextUrl) {
     window.history[historyMode === "replace" ? "replaceState" : "pushState"]({}, "", nextUrl);
   }
 
   renderApp();
+}
+
+function setGoogleMission(missionId) {
+  state.googleMissionId = missionId;
+  renderApp();
+}
+
+function setGoogleCampaign(campaignId) {
+  state.googleCampaignId = campaignId;
+  renderApp();
+}
+
+function setGoogleFilter(key, value) {
+  state.googleFilters[key] = value;
+  renderScreen();
 }
 
 function formToObject(form) {
@@ -217,8 +277,10 @@ function getEntityPrefix(entity) {
   const prefixes = {
     whatsapp_items: "wa",
     linkedin_prospects: "li",
-    google_inbound_items: "gi",
-    google_rank_tasks: "gr",
+    google_prompt_templates: "tpl",
+    google_maps_missions: "gm",
+    google_inbound_items: "gmlead",
+    google_rank_tasks: "gseo",
     qualified_leads: "ql",
     opportunities: "opp",
   };
@@ -228,12 +290,12 @@ function getEntityPrefix(entity) {
 async function handleCreateEntity(form) {
   const entity = form.dataset.createEntity;
   const values = formToObject(form);
-  if (entity === "google_rank_tasks" && !values.task_summary) {
-    values.task_summary = values.summary || "";
-  }
   values.id = values.id || createId(getEntityPrefix(entity));
-  const endpoint = `/${entity}`;
-  const next = await sendRequest(endpoint, {
+  if (entity === "google_prompt_templates" && !values.output_contract_json) {
+    values.output_contract_json = "{}";
+  }
+
+  const next = await sendRequest(`/${entity}`, {
     method: "POST",
     body: values,
     sessionId: state.sessionId,
@@ -241,6 +303,7 @@ async function handleCreateEntity(form) {
   });
   state.data = next.payload;
   state.version = next.version;
+  syncGoogleSelections();
   state.notice = `${state.copy.chrome.create}: ${localizeValue(state.copy, entity)}`;
   renderApp();
 }
@@ -256,6 +319,7 @@ async function handleEditRecord(form) {
   });
   state.data = next.payload;
   state.version = next.version;
+  syncGoogleSelections();
   state.notice = `${state.copy.chrome.save}: ${id}`;
   renderApp();
 }
@@ -311,13 +375,87 @@ async function handleTransition(token) {
   });
   state.data = next.payload;
   state.version = next.version;
+  syncGoogleSelections();
   state.notice = `${state.copy.chrome.move}: ${localizeValue(state.copy, nextStatus)}`;
   renderApp();
 }
 
+function getImportRoute(token) {
+  const [kind, id, slotKey] = token.split(":");
+  if (kind === "maps") {
+    return {
+      path: `/google_maps_missions/${id}/${slotKey === "shortlist" ? "import-shortlist" : "import-search"}`,
+      slot_key: slotKey,
+    };
+  }
+  if (kind === "search") {
+    const actionMap = {
+      keyword_strategy: "import-keyword-strategy",
+      subkeyword_cluster: "import-subkeyword-cluster",
+      article_planner: "import-article-planner",
+    };
+    return {
+      path: `/google_rank_tasks/${id}/${actionMap[slotKey]}`,
+      slot_key: slotKey,
+    };
+  }
+  throw new Error("Unknown import route.");
+}
+
+async function handleImportJson(form) {
+  const token = form.dataset.importJson;
+  const values = formToObject(form);
+  const route = getImportRoute(token);
+  const next = await sendRequest(route.path, {
+    method: "POST",
+    body: {
+      slot_key: route.slot_key,
+      result_json: values.result_json || "",
+    },
+    sessionId: state.sessionId,
+    version: state.version,
+  });
+  state.data = next.payload;
+  state.version = next.version;
+  syncGoogleSelections();
+  state.notice = state.copy.chrome.importSucceeded;
+  renderApp();
+}
+
+function refreshPromptPreview(slotElement) {
+  if (!slotElement) return;
+  const select = slotElement.querySelector("[data-template-select]");
+  const overrideInput = slotElement.querySelector("[data-override-input]");
+  const preview = slotElement.querySelector("[data-prompt-preview]");
+  const contract = slotElement.querySelector("[data-output-contract-preview]");
+  const template = findTemplate(state, select?.value || "");
+  const merged = buildPromptPreview(template, overrideInput?.value || "");
+  if (preview) {
+    preview.textContent = merged || state.copy.chrome.empty;
+  }
+  if (contract) {
+    contract.textContent = template?.output_contract_json || state.copy.chrome.empty;
+  }
+}
+
+async function handleCopySlotText(button) {
+  const slotElement = button.closest("[data-prompt-slot]");
+  const selector = button.dataset.copySource === "contract" ? "[data-output-contract-preview]" : "[data-prompt-preview]";
+  const content = slotElement?.querySelector(selector)?.textContent || "";
+  if (!content || content === state.copy.chrome.empty) return;
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(content);
+    const original = button.textContent;
+    button.textContent = state.copy.chrome.copied;
+    window.setTimeout(() => {
+      button.textContent = original;
+    }, 1200);
+  }
+}
+
 function bindEvents() {
   document.body.addEventListener("click", async (event) => {
-    const target = event.target.closest("[data-nav],[data-open-drawer],[data-transition],[data-set-google-tab],[data-close-drawer]");
+    const target = event.target.closest("[data-nav],[data-open-drawer],[data-transition],[data-set-google-tab],[data-close-drawer],[data-set-google-mission],[data-set-google-campaign],[data-copy-source]");
     if (!target) return;
 
     if (target.dataset.nav) {
@@ -347,6 +485,25 @@ function bindEvents() {
       return;
     }
 
+    if (target.dataset.setGoogleMission) {
+      setGoogleMission(target.dataset.setGoogleMission);
+      return;
+    }
+
+    if (target.dataset.setGoogleCampaign) {
+      setGoogleCampaign(target.dataset.setGoogleCampaign);
+      return;
+    }
+
+    if (target.dataset.copySource) {
+      try {
+        await handleCopySlotText(target);
+      } catch (error) {
+        console.error(error);
+      }
+      return;
+    }
+
     if (target.dataset.closeDrawer) {
       closeDrawer();
     }
@@ -364,10 +521,32 @@ function bindEvents() {
         await handleConvertSource(form);
       } else if (form.dataset.createOpportunity) {
         await handleCreateOpportunity(form);
+      } else if (form.dataset.importJson) {
+        await handleImportJson(form);
       }
     } catch (error) {
       state.notice = error.message;
       renderApp();
+    }
+  });
+
+  document.body.addEventListener("change", (event) => {
+    const filterTarget = event.target.closest("[data-google-filter]");
+    if (filterTarget) {
+      setGoogleFilter(filterTarget.dataset.googleFilter, filterTarget.value);
+      return;
+    }
+
+    const slotElement = event.target.closest("[data-prompt-slot]");
+    if (slotElement) {
+      refreshPromptPreview(slotElement);
+    }
+  });
+
+  document.body.addEventListener("input", (event) => {
+    const slotElement = event.target.closest("[data-prompt-slot]");
+    if (slotElement) {
+      refreshPromptPreview(slotElement);
     }
   });
 
@@ -386,7 +565,7 @@ async function bootstrapApp({ locale = "en", screenKey = "home" } = {}) {
   state.locale = locale;
   state.copy = getLocaleConfig(locale);
   state.screenKey = screenKey;
-  state.googleTab = screenKey === "google" ? getGoogleTabFromSearch() : "inbound";
+  state.googleTab = screenKey === "google" ? getGoogleTabFromSearch() : "maps-ops";
 
   elements = {
     nav: document.querySelector("#app-nav"),

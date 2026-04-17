@@ -289,6 +289,74 @@ button, input, textarea, select { font: inherit; }
 }
 .app-tab.active { color: var(--text); background: rgba(95,214,160,0.1); border-color: rgba(95,214,160,0.25); }
 
+.app-google-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.app-google-side {
+  display: grid;
+  gap: 16px;
+  position: sticky;
+  top: 24px;
+}
+
+.app-google-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.app-selection-row.active {
+  border-color: rgba(95,214,160,0.25);
+  background: rgba(95,214,160,0.08);
+  box-shadow: inset 0 0 0 1px rgba(95,214,160,0.12);
+}
+
+.app-slot-stack { display: grid; gap: 16px; }
+
+.app-slot-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  display: grid;
+  gap: 14px;
+}
+
+.app-slot-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-slot-head h4 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.app-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.app-code-block {
+  margin: 0;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(0,0,0,0.22);
+  color: #d9ece5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 280px;
+}
+
 .app-drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -322,6 +390,8 @@ button, input, textarea, select { font: inherit; }
   .app-shell { grid-template-columns: 1fr; }
   .app-sidebar { border-inline-end: 0; border-bottom: 1px solid var(--line); }
   .app-home-grid, .app-home-lower, .app-detail-layout { grid-template-columns: 1fr; }
+  .app-google-layout, .app-google-grid, .app-prompt-grid { grid-template-columns: 1fr; }
+  .app-google-side { position: static; }
 }
 
 @media (max-width: 720px) {
