@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en" dir="ltr">
-  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Opportunity</title><link rel="icon" href="data:," /><link rel="stylesheet" href="../../app/styles.css" /></head>
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Opportunity</title><link rel="icon" href="data:," /><script>window.__APP_BASE_PATH__ = window.location.pathname.match(/^(.*)\/(en|ar)(?:\/|$)/)?.[1] || "";</script><link rel="stylesheet" href="" id="app-stylesheet" /><script>document.getElementById("app-stylesheet").href = `${window.__APP_BASE_PATH__}/app/styles.css`;</script></head>
   <body>
     <div class="app-shell"><aside class="app-sidebar"><div class="app-brand"><div class="app-brand-mark" id="app-brand-mark">MC</div><div class="app-brand-copy"><p id="app-product-subtitle">Channel operations</p><h1 id="app-product-name">MyCalls</h1></div></div><nav class="app-nav" id="app-nav"></nav></aside><main class="app-main"><header class="app-topbar"><div><p class="app-kicker">Workspace</p><h2 id="app-screen-title">Opportunity</h2></div><div class="app-topbar-actions"><a class="app-lang-switch" id="app-locale-switch" href="../../ar/opportunities/">AR</a></div></header><section id="app-content"></section></main></div>
     <div class="app-drawer-backdrop hidden" id="app-drawer-backdrop"></div><aside class="app-drawer hidden" id="app-drawer"><div class="app-drawer-header"><h3 id="app-drawer-title">Details</h3><button class="app-button ghost" id="app-drawer-close" type="button">Close</button></div><div class="app-drawer-body" id="app-drawer-body"></div></aside>
-    <script type="module">import { bootstrapApp } from "../../app/app.mjs"; await bootstrapApp({ locale: "en", screenKey: "opportunity-detail" });</script>
+    <script type="module">const { bootstrapApp } = await import(`${window.__APP_BASE_PATH__}/app/app.mjs`); await bootstrapApp({ locale: "en", screenKey: "opportunity-detail" });</script>
   </body>
 </html>
