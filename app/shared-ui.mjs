@@ -35,27 +35,27 @@ function formatShortDate(value, locale = "en") {
 }
 
 function renderBadge(label, tone = "") {
-  return `<span class="v2-badge ${tone}">${escapeHtml(label)}</span>`;
+  return `<span class="app-badge ${tone}">${escapeHtml(label)}</span>`;
 }
 
 function renderEmptyState(copy) {
-  return `<div class="v2-empty">${escapeHtml(copy.chrome.empty)}</div>`;
+  return `<div class="app-empty">${escapeHtml(copy.chrome.empty)}</div>`;
 }
 
 function renderSectionHeading(label, title, actions = "") {
   return `
-    <div class="v2-section-head">
+    <div class="app-section-head">
       <div>
-        <p class="v2-kicker">${escapeHtml(label)}</p>
+        <p class="app-kicker">${escapeHtml(label)}</p>
         <h3>${escapeHtml(title)}</h3>
       </div>
-      ${actions ? `<div class="v2-section-actions">${actions}</div>` : ""}
+      ${actions ? `<div class="app-section-actions">${actions}</div>` : ""}
     </div>
   `;
 }
 
 function renderKeyValue(label, value) {
-  return `<div class="v2-kv"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "—")}</strong></div>`;
+  return `<div class="app-kv"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "—")}</strong></div>`;
 }
 
 export {

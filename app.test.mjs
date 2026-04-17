@@ -5,11 +5,12 @@ import os from "node:os";
 import path from "node:path";
 
 import { createAppServer } from "./server.mjs";
-import { createV2SeedData, getAllHomeSummaries, normalizeV2State } from "./v2/domain.mjs";
-import { getRuntimeBasePath, getRuntimeMode, getStaticStatePath } from "./v2/shared-state.mjs";
+import { createSeedData, getAllHomeSummaries, normalizeState } from "./app/domain.mjs";
+import { normalizeGoogleTab, routeForPath } from "./app/app.mjs";
+import { getRuntimeBasePath, getRuntimeMode, getStaticStatePath } from "./app/shared-state.mjs";
 
 async function startTestServer() {
-  const tempDir = await mkdtemp(path.join(process.env.TEST_TMPDIR || "/tmp", "mycalls-v2-server-"));
+  const tempDir = await mkdtemp(path.join(process.env.TEST_TMPDIR || "/tmp", "mycalls-app-server-"));
   const app = createAppServer({ dataDir: tempDir });
   await app.start(0);
   const address = app.server.address();
@@ -20,7 +21,7 @@ async function startTestServer() {
 }
 
 test("state normalizes the explicit entity collections", () => {
-  const normalized = normalizeV2State({
+  const normalized = normalizeState({
     whatsapp_items: [{ id: "wa-x", phone: "1", contact_name: "A", company_name: "B", summary: "S", next_step: "N", next_step_date: "2026-04-15" }],
   });
 
@@ -33,7 +34,7 @@ test("state normalizes the explicit entity collections", () => {
 });
 
 test("home summaries stay channel-first with one resume item per channel", () => {
-  const seed = createV2SeedData();
+  const seed = createSeedData();
   const summaries = getAllHomeSummaries(seed);
 
   assert.equal(summaries.length, 3);
@@ -99,7 +100,7 @@ test("PATCH rejects invalid explicit transitions", async () => {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        "X-User": "v2-test",
+        "X-User": "app-test",
       },
       body: JSON.stringify({ status: "Follow-up Due" }),
     });
@@ -119,7 +120,7 @@ test("POST /conversions/qualified-leads creates one qualified lead and preserves
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-User": "v2-test",
+        "X-User": "app-test",
       },
       body: JSON.stringify({
         id: "ql-converted",
@@ -148,7 +149,7 @@ test("duplicate qualified lead conversion is rejected for the same source record
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-User": "v2-test",
+        "X-User": "app-test",
       },
       body: JSON.stringify({
         id: "ql-once",
@@ -165,7 +166,7 @@ test("duplicate qualified lead conversion is rejected for the same source record
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-User": "v2-test",
+        "X-User": "app-test",
       },
       body: JSON.stringify({
         id: "ql-twice",
@@ -193,7 +194,7 @@ test("POST /opportunities only accepts ready handoff records and prevents duplic
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-User": "v2-test",
+        "X-User": "app-test",
       },
       body: JSON.stringify({
         id: "opp-invalid",
@@ -215,7 +216,7 @@ test("POST /opportunities only accepts ready handoff records and prevents duplic
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        "X-User": "v2-test",
+        "X-User": "app-test",
       },
       body: JSON.stringify({ handoff_status: "Ready for Opportunity" }),
     });
@@ -224,7 +225,7 @@ test("POST /opportunities only accepts ready handoff records and prevents duplic
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-User": "v2-test",
+        "X-User": "app-test",
       },
       body: JSON.stringify({
         id: "opp-valid",
@@ -246,7 +247,7 @@ test("POST /opportunities only accepts ready handoff records and prevents duplic
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-User": "v2-test",
+        "X-User": "app-test",
       },
       body: JSON.stringify({
         id: "opp-duplicate",
@@ -278,13 +279,26 @@ test("localized routes and dynamic opportunity route resolve to HTML", async () 
     assert.equal(home.status, 200);
     assert.equal(google.status, 200);
     assert.equal(opportunity.status, 200);
-    assert.match(await opportunity.text(), /bootstrapV2/);
+    assert.match(await opportunity.text(), /bootstrapApp/);
   } finally {
     await app.stop();
   }
 });
 
-test("root locale entrypoints render the canonical non-versioned shell", async () => {
+test("google tab routing normalizes invalid values and preserves rank-ops routes", () => {
+  assert.equal(normalizeGoogleTab("rank-ops"), "rank-ops");
+  assert.equal(normalizeGoogleTab("unknown"), "inbound");
+  assert.equal(
+    routeForPath("google", { basePath: "/My-Calles", locale: "en", googleTab: "rank-ops" }),
+    "/My-Calles/en/google/?tab=rank-ops",
+  );
+  assert.equal(
+    routeForPath("google", { basePath: "/My-Calles", locale: "ar", googleTab: "unknown" }),
+    "/My-Calles/ar/google/",
+  );
+});
+
+test("root locale entrypoints render the canonical unversioned shell", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
     const root = await fetch(`${baseUrl}/`);
@@ -295,8 +309,8 @@ test("root locale entrypoints render the canonical non-versioned shell", async (
     const arabicHtml = await arabic.text();
 
     assert.match(rootHtml, /en\//);
-    assert.match(englishHtml, /bootstrapV2/);
-    assert.match(arabicHtml, /bootstrapV2/);
+    assert.match(englishHtml, /bootstrapApp/);
+    assert.match(arabicHtml, /bootstrapApp/);
     assert.doesNotMatch(englishHtml, /MyCalls V2|Channel Ops V2|>V2</);
     assert.doesNotMatch(arabicHtml, /نظام التشغيل V2|تشغيل القنوات V2|>V2</);
   } finally {
@@ -304,7 +318,7 @@ test("root locale entrypoints render the canonical non-versioned shell", async (
   }
 });
 
-test("legacy versioned API routes redirect to canonical endpoints", async () => {
+test("legacy compatibility API routes redirect to canonical endpoints", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
     const oldState = await fetch(`${baseUrl}/v2/state`, { redirect: "manual" });
@@ -324,7 +338,7 @@ test("legacy versioned API routes redirect to canonical endpoints", async () => 
   }
 });
 
-test("legacy versioned frontend routes redirect to canonical localized routes", async () => {
+test("legacy compatibility frontend routes redirect to canonical localized routes", async () => {
   const { app, baseUrl } = await startTestServer();
   try {
     const home = await fetch(`${baseUrl}/en/v2/`, { redirect: "manual" });

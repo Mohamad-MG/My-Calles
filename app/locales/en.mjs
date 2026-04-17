@@ -128,6 +128,7 @@ export default {
     "Awaiting Reply": "Awaiting reply",
     "In Conversation": "In conversation",
     "Needs Response": "Needs response",
+    "Follow-up": "Follow-up",
     "In Progress": "In progress",
     "Waiting Data": "Waiting data",
     "Opportunity Found": "Opportunity found",

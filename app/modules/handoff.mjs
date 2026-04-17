@@ -17,38 +17,38 @@ function renderHandoff(app) {
   const { copy, state } = app;
   const leads = selectQualifiedLeads(state);
   return `
-    <section class="v2-screen workspace-screen">
-      <header class="v2-hero compact">
+    <section class="app-screen workspace-screen">
+      <header class="app-hero compact">
         <div>
-          <p class="v2-kicker">${escapeHtml(copy.nav.handoff)}</p>
+          <p class="app-kicker">${escapeHtml(copy.nav.handoff)}</p>
           <h1>${escapeHtml(copy.modules.handoff.title)}</h1>
-          <p class="v2-hero-copy">${escapeHtml(copy.modules.handoff.subtitle)}</p>
+          <p class="app-hero-copy">${escapeHtml(copy.modules.handoff.subtitle)}</p>
         </div>
       </header>
-      <section class="v2-board">
+      <section class="app-board">
         ${HANDOFF_STATUSES
           .map((status) => {
             const items = leads.filter((lead) => lead.handoff_status === status);
             return `
-              <article class="v2-panel v2-column">
+              <article class="app-panel app-column">
                 ${renderSectionHeading(copy.chrome.status, localizeValue(copy, status), renderBadge(String(items.length), "muted"))}
-                <div class="v2-column-stack">
+                <div class="app-column-stack">
                   ${
                     items.length
                       ? items
                           .map(
                             (item) => `
-                              <article class="v2-record-card">
-                                <button class="v2-card-main" type="button" data-open-drawer="qualified_leads:${item.id}">
-                                  <div class="v2-card-head">
+                              <article class="app-record-card">
+                                <button class="app-card-main" type="button" data-open-drawer="qualified_leads:${item.id}">
+                                  <div class="app-card-head">
                                     <div>
                                       <strong>${escapeHtml(item.pain_summary)}</strong>
                                       <p>${escapeHtml(item.origin_channel)} • ${escapeHtml(localizeValue(copy, item.origin_entity))}</p>
                                     </div>
                                     ${renderBadge(localizeValue(copy, item.handoff_status))}
                                   </div>
-                                  <p class="v2-card-summary">${escapeHtml(item.qualification_note || "—")}</p>
-                                  <div class="v2-card-meta">
+                                  <p class="app-card-summary">${escapeHtml(item.qualification_note || "—")}</p>
+                                  <div class="app-card-meta">
                                     ${renderBadge(localizeValue(copy, item.recommended_service), "accent")}
                                     ${renderBadge(localizeValue(copy, item.recommended_service_confidence), "muted")}
                                   </div>
@@ -72,9 +72,9 @@ function renderHandoff(app) {
 function renderHandoffDrawer(app, record) {
   const { copy } = app;
   return `
-    <div class="v2-drawer-stack">
+    <div class="app-drawer-stack">
       ${renderSectionHeading(copy.nav.handoff, record.pain_summary)}
-      <div class="v2-detail-grid">
+      <div class="app-detail-grid">
         ${renderKeyValue(copy.chrome.origin, `${record.origin_channel} / ${localizeValue(copy, record.origin_entity)}`)}
         ${renderKeyValue(copy.chrome.handoffStatus, localizeValue(copy, record.handoff_status))}
         ${renderKeyValue(copy.chrome.service, localizeValue(copy, record.recommended_service))}
@@ -82,7 +82,7 @@ function renderHandoffDrawer(app, record) {
         ${renderKeyValue(copy.chrome.nextStepDate, formatShortDate(record.updated_at, copy.meta.lang))}
       </div>
       <form data-edit-record="qualified_leads:${record.id}">
-        <div class="v2-form-grid">
+        <div class="app-form-grid">
           <label class="wide"><span>${escapeHtml(copy.forms.painSummary)}</span><textarea name="pain_summary">${escapeHtml(record.pain_summary)}</textarea></label>
           <label class="wide"><span>${escapeHtml(copy.forms.qualificationNote)}</span><textarea name="qualification_note">${escapeHtml(record.qualification_note)}</textarea></label>
           <label><span>${escapeHtml(copy.chrome.service)}</span><select name="recommended_service"><option value="mycalls" ${record.recommended_service === "mycalls" ? "selected" : ""}>${escapeHtml(copy.values.mycalls)}</option><option value="nicechat" ${record.recommended_service === "nicechat" ? "selected" : ""}>${escapeHtml(copy.values.nicechat)}</option><option value="both" ${record.recommended_service === "both" ? "selected" : ""}>${escapeHtml(copy.values.both)}</option></select></label>
@@ -90,13 +90,13 @@ function renderHandoffDrawer(app, record) {
           <label><span>${escapeHtml(copy.chrome.handoffStatus)}</span><select name="handoff_status">${getAllowedHandoffStatuses(record).map((status) => `<option value="${status}" ${record.handoff_status === status ? "selected" : ""}>${escapeHtml(localizeValue(copy, status))}</option>`).join("")}</select></label>
           <label class="wide"><span>${escapeHtml(copy.chrome.notes)}</span><textarea name="notes">${escapeHtml(record.notes || "")}</textarea></label>
         </div>
-        <div class="v2-form-actions"><button class="v2-button primary" type="submit">${escapeHtml(copy.chrome.save)}</button></div>
+        <div class="app-form-actions"><button class="app-button primary" type="submit">${escapeHtml(copy.chrome.save)}</button></div>
       </form>
       ${
         record.handoff_status === "Ready for Opportunity" && !record.converted_opportunity_id
           ? `
             <form data-create-opportunity="${record.id}">
-              <div class="v2-form-grid">
+              <div class="app-form-grid">
                 <label><span>${escapeHtml(copy.forms.companyName)}</span><input name="company_name" required /></label>
                 <label class="wide"><span>${escapeHtml(copy.forms.useCase)}</span><input name="use_case" required /></label>
                 <label><span>${escapeHtml(copy.forms.estimatedValue)}</span><input type="number" name="estimated_value" value="0" /></label>
@@ -108,11 +108,11 @@ function renderHandoffDrawer(app, record) {
               <input type="hidden" name="stakeholder_status" value="Primary contact identified" />
               <input type="hidden" name="stakeholder_map" value="${escapeHtml(record.qualification_note || "")}" />
               <input type="hidden" name="pain_summary" value="${escapeHtml(record.pain_summary || "")}" />
-              <div class="v2-form-actions"><button class="v2-button primary" type="submit">${escapeHtml(copy.chrome.createOpportunity)}</button></div>
+              <div class="app-form-actions"><button class="app-button primary" type="submit">${escapeHtml(copy.chrome.createOpportunity)}</button></div>
             </form>
           `
           : record.converted_opportunity_id
-            ? `<div class="v2-inline-note">${escapeHtml(copy.chrome.alreadyConverted)}: ${escapeHtml(record.converted_opportunity_id)}</div>`
+            ? `<div class="app-inline-note">${escapeHtml(copy.chrome.alreadyConverted)}: ${escapeHtml(record.converted_opportunity_id)}</div>`
             : ""
       }
     </div>

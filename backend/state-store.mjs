@@ -4,18 +4,18 @@ import path from "node:path";
 import {
   createOpportunityFromQualifiedLead,
   createQualifiedLeadFromSource,
-  createV2SeedData,
+  createSeedData,
   getCreateErrors,
   getRequiredErrors,
   getSourceRecord,
   getStatusField,
   hasDuplicateOpportunity,
-  normalizeV2State,
-  resolveV2Collection,
+  normalizeState,
+  resolveCollection,
   SERVICE_CONFIDENCE_OPTIONS,
   SERVICE_OPTIONS,
   validateStatusPatch,
-} from "../v2/domain.mjs";
+} from "../app/domain.mjs";
 
 function nowIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -57,7 +57,7 @@ function buildRecentActivity(records = []) {
     }));
 }
 
-class V2StateStore {
+class StateStore {
   constructor({ dataDir }) {
     this.dataDir = dataDir;
     this.stateFile = path.join(dataDir, "dashboard-state.json");
@@ -158,7 +158,7 @@ class V2StateStore {
 
   async patchEntity(entity, id, patch, actor = "system") {
     const timestamp = nowIsoDate();
-    const collection = resolveV2Collection(entity);
+    const collection = resolveCollection(entity);
     const currentState = await this.getState();
     const nextState = clone(currentState);
     const index = nextState[collection].findIndex((item) => item.id === id);
@@ -216,7 +216,7 @@ class V2StateStore {
 
   async createEntity(entity, values, actor = "system") {
     const timestamp = nowIsoDate();
-    const collection = resolveV2Collection(entity);
+    const collection = resolveCollection(entity);
     const currentState = await this.getState();
     const existing = currentState[collection].find((item) => item.id === values.id);
     if (existing) {
@@ -292,7 +292,7 @@ class V2StateStore {
     }
 
     const nextState = clone(currentState);
-    const collection = resolveV2Collection(source_entity);
+    const collection = resolveCollection(source_entity);
     const index = nextState[collection].findIndex((item) => item.id === source_id);
     nextState[collection][index] = {
       ...nextState[collection][index],
@@ -362,7 +362,7 @@ class V2StateStore {
 
   async restoreSeed(actor = "system", reason = "restore-seed") {
     const timestamp = nowIsoDate();
-    const nextState = normalizeV2State(createV2SeedData(), actor, timestamp);
+    const nextState = normalizeState(createSeedData(), actor, timestamp);
     const beforeState = await this.getState();
     await this.#commit({
       action: reason,
@@ -380,9 +380,9 @@ class V2StateStore {
   async #loadState() {
     try {
       const serialized = await readFile(this.stateFile, "utf8");
-      return normalizeV2State(JSON.parse(serialized));
+      return normalizeState(JSON.parse(serialized));
     } catch {
-      const initialState = normalizeV2State(createV2SeedData());
+      const initialState = normalizeState(createSeedData());
       await writeFile(this.stateFile, JSON.stringify(initialState, null, 2));
       return initialState;
     }
@@ -409,7 +409,7 @@ class V2StateStore {
   async #commit({ action, entity, id, before, after, state, actor, timestamp }) {
     const previousState = clone(this.state);
     const nextVersion = Number(this.state?._meta?.version || 1) + 1;
-    const committedState = withStateMeta(normalizeV2State(state, actor, timestamp), {
+    const committedState = withStateMeta(normalizeState(state, actor, timestamp), {
       version: nextVersion,
       lastMutationAt: timestamp,
       lastMutationBy: actor,
@@ -437,4 +437,4 @@ class V2StateStore {
   }
 }
 
-export { V2StateStore };
+export { StateStore };

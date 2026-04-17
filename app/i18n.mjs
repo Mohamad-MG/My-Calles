@@ -3,8 +3,8 @@ import ar from "./locales/ar.mjs";
 
 const LOCALES = { en, ar };
 
-function getV2LocaleConfig(locale = "en") {
+function getLocaleConfig(locale = "en") {
   return LOCALES[locale] || LOCALES.en;
 }
 
-export { getV2LocaleConfig };
+export { getLocaleConfig };

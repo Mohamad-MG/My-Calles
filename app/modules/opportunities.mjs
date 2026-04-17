@@ -9,30 +9,30 @@ function renderOpportunityDetail(app, opportunity) {
   const { copy } = app;
   if (!opportunity) {
     return `
-      <section class="v2-screen workspace-screen">
-        <article class="v2-panel"><h1>${escapeHtml(copy.modules.opportunity.title)}</h1><p>${escapeHtml(copy.chrome.empty)}</p></article>
+      <section class="app-screen workspace-screen">
+        <article class="app-panel"><h1>${escapeHtml(copy.modules.opportunity.title)}</h1><p>${escapeHtml(copy.chrome.empty)}</p></article>
       </section>
     `;
   }
 
   return `
-    <section class="v2-screen workspace-screen">
-      <header class="v2-hero compact">
+    <section class="app-screen workspace-screen">
+      <header class="app-hero compact">
         <div>
-          <p class="v2-kicker">${escapeHtml(copy.labels.opportunities)}</p>
+          <p class="app-kicker">${escapeHtml(copy.labels.opportunities)}</p>
           <h1>${escapeHtml(opportunity.company_name)}</h1>
-          <p class="v2-hero-copy">${escapeHtml(copy.modules.opportunity.subtitle)}</p>
+          <p class="app-hero-copy">${escapeHtml(copy.modules.opportunity.subtitle)}</p>
         </div>
-        <div class="v2-inline-badges">
+        <div class="app-inline-badges">
           ${renderBadge(localizeValue(copy, opportunity.current_stage))}
           ${renderBadge(formatShortDate(opportunity.next_step_date, copy.meta.lang), "outline")}
         </div>
       </header>
 
-      <section class="v2-detail-layout">
-        <article class="v2-panel">
+      <section class="app-detail-layout">
+        <article class="app-panel">
           ${renderSectionHeading(copy.modules.opportunity.title, opportunity.company_name)}
-          <div class="v2-detail-grid">
+          <div class="app-detail-grid">
             ${renderKeyValue(copy.forms.currentStage, localizeValue(copy, opportunity.current_stage))}
             ${renderKeyValue(copy.forms.buyerReadiness, localizeValue(copy, opportunity.buyer_readiness))}
             ${renderKeyValue(copy.forms.stakeholderStatus, localizeValue(copy, opportunity.stakeholder_status))}
@@ -41,10 +41,10 @@ function renderOpportunityDetail(app, opportunity) {
             ${renderKeyValue(copy.chrome.origin, opportunity.origin_channel || "—")}
           </div>
         </article>
-        <article class="v2-panel">
+        <article class="app-panel">
           ${renderSectionHeading(copy.chrome.edit, copy.chrome.edit)}
           <form data-edit-record="opportunities:${opportunity.id}">
-            <div class="v2-form-grid">
+            <div class="app-form-grid">
               <label><span>${escapeHtml(copy.forms.currentStage)}</span><select name="current_stage">${OPPORTUNITY_ACTIVE_STAGES.map((stage) => `<option value="${stage}" ${opportunity.current_stage === stage ? "selected" : ""}>${escapeHtml(localizeValue(copy, stage))}</option>`).join("")}</select></label>
               <label><span>${escapeHtml(copy.forms.buyerReadiness)}</span><input name="buyer_readiness" value="${escapeHtml(opportunity.buyer_readiness)}" /></label>
               <label><span>${escapeHtml(copy.forms.estimatedValue)}</span><input type="number" name="estimated_value" value="${escapeHtml(String(opportunity.estimated_value || 0))}" /></label>
@@ -57,7 +57,7 @@ function renderOpportunityDetail(app, opportunity) {
               <label><span>${escapeHtml(copy.chrome.nextStepDate)}</span><input type="date" name="next_step_date" value="${escapeHtml(opportunity.next_step_date || "")}" /></label>
               <label class="wide"><span>${escapeHtml(copy.chrome.notes)}</span><textarea name="notes">${escapeHtml(opportunity.notes || "")}</textarea></label>
             </div>
-            <div class="v2-form-actions"><button class="v2-button primary" type="submit">${escapeHtml(copy.chrome.save)}</button></div>
+            <div class="app-form-actions"><button class="app-button primary" type="submit">${escapeHtml(copy.chrome.save)}</button></div>
           </form>
         </article>
       </section>

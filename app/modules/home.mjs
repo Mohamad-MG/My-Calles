@@ -15,12 +15,12 @@ function getChannelLabel(copy, channel) {
 
 function renderResume(summary, copy) {
   if (!summary.resume_item) {
-    return `<p class="v2-muted">${escapeHtml(copy.chrome.empty)}</p>`;
+    return `<p class="app-muted">${escapeHtml(copy.chrome.empty)}</p>`;
   }
 
   const record = summary.resume_item;
   return `
-    <div class="v2-resume-box">
+    <div class="app-resume-box">
       <strong>${escapeHtml(record.company_name || record.profile_name || record.keyword || record.contact_name || "Resume item")}</strong>
       <p>${escapeHtml(record.summary || record.next_step || "—")}</p>
       <small>${escapeHtml(copy.chrome.nextStep)}: ${escapeHtml(record.next_step || "—")} • ${formatShortDate(record.next_step_date, copy.meta.lang)}</small>
@@ -37,28 +37,28 @@ function renderHome(app) {
   const recent = (state.data.recent_activity || []).slice(0, 3);
 
   return `
-    <section class="v2-screen home-screen">
-      <header class="v2-hero">
+    <section class="app-screen home-screen">
+      <header class="app-hero">
         <div>
-          <p class="v2-kicker">${escapeHtml(copy.meta.productSubtitle)}</p>
+          <p class="app-kicker">${escapeHtml(copy.meta.productSubtitle)}</p>
           <h1>${escapeHtml(copy.home.title)}</h1>
-          <p class="v2-hero-copy">${escapeHtml(copy.home.subtitle)}</p>
+          <p class="app-hero-copy">${escapeHtml(copy.home.subtitle)}</p>
         </div>
       </header>
 
-      <section class="v2-home-grid">
+      <section class="app-home-grid">
         ${summaries
           .map(
             (summary) => `
-              <article class="v2-panel v2-channel-card">
-                ${renderSectionHeading(getChannelLabel(copy, summary.channel), getChannelLabel(copy, summary.channel), `<button class="v2-button primary" type="button" data-nav="${getWorkspaceRoute(summary.channel)}">${escapeHtml(copy.home.openWorkspace)}</button>`)}
-                <div class="v2-stats-grid compact">
-                  <div class="v2-stat"><span>${escapeHtml(copy.chrome.todayCaptured)}</span><strong>${summary.today_captured}</strong></div>
-                  <div class="v2-stat"><span>${escapeHtml(copy.chrome.needsAction)}</span><strong>${summary.needs_action}</strong></div>
-                  <div class="v2-stat"><span>${escapeHtml(copy.chrome.qualifiedReady)}</span><strong>${summary.qualified_ready}</strong></div>
+              <article class="app-panel app-channel-card">
+                ${renderSectionHeading(getChannelLabel(copy, summary.channel), getChannelLabel(copy, summary.channel), `<button class="app-button primary" type="button" data-nav="${getWorkspaceRoute(summary.channel)}">${escapeHtml(copy.home.openWorkspace)}</button>`)}
+                <div class="app-stats-grid compact">
+                  <div class="app-stat"><span>${escapeHtml(copy.chrome.todayCaptured)}</span><strong>${summary.today_captured}</strong></div>
+                  <div class="app-stat"><span>${escapeHtml(copy.chrome.needsAction)}</span><strong>${summary.needs_action}</strong></div>
+                  <div class="app-stat"><span>${escapeHtml(copy.chrome.qualifiedReady)}</span><strong>${summary.qualified_ready}</strong></div>
                 </div>
-                <div class="v2-subpanel">
-                  <div class="v2-subpanel-head">
+                <div class="app-subpanel">
+                  <div class="app-subpanel-head">
                     <span>${escapeHtml(copy.chrome.resume)}</span>
                     ${renderBadge(getChannelLabel(copy, summary.channel))}
                   </div>
@@ -70,21 +70,21 @@ function renderHome(app) {
           .join("")}
       </section>
 
-      <section class="v2-home-lower">
-        <article class="v2-panel">
+      <section class="app-home-lower">
+        <article class="app-panel">
           ${renderSectionHeading(copy.chrome.handoffCenter, copy.nav.handoff)}
-          <div class="v2-list">
+          <div class="app-list">
             ${
               handoffItems.length
                 ? handoffItems
                     .map(
                       (item) => `
-                        <button class="v2-list-row" type="button" data-open-drawer="qualified_leads:${item.id}">
+                        <button class="app-list-row" type="button" data-open-drawer="qualified_leads:${item.id}">
                           <div>
                             <strong>${escapeHtml(item.pain_summary || item.origin_channel)}</strong>
                             <p>${escapeHtml(item.qualification_note || "—")}</p>
                           </div>
-                          <div class="v2-list-meta">
+                          <div class="app-list-meta">
                             ${renderBadge(localizeValue(copy, item.handoff_status))}
                             ${renderBadge(localizeValue(copy, item.recommended_service), "accent")}
                           </div>
@@ -97,15 +97,15 @@ function renderHome(app) {
           </div>
         </article>
 
-        <article class="v2-panel">
+        <article class="app-panel">
           ${renderSectionHeading(copy.chrome.recentActivity, copy.chrome.recentActivity)}
-          <div class="v2-list">
+          <div class="app-list">
             ${
               recent.length
                 ? recent
                     .map(
                       (item) => `
-                        <div class="v2-list-row static">
+                        <div class="app-list-row static">
                           <div>
                             <strong>${escapeHtml(item.summary || item.entity)}</strong>
                             <p>${escapeHtml(localizeValue(copy, item.action))}</p>

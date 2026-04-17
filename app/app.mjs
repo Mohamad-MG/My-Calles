@@ -1,17 +1,19 @@
 import { createId, getStatusField } from "./domain.mjs";
-import { getV2LocaleConfig } from "./i18n.mjs";
+import { getLocaleConfig } from "./i18n.mjs";
 import { renderHome } from "./modules/home.mjs";
 import { renderHandoff, renderHandoffDrawer } from "./modules/handoff.mjs";
 import { renderGoogleDrawer, renderGoogleShell } from "./modules/google-shell.mjs";
 import { renderLinkedIn, renderLinkedInDrawer } from "./modules/linkedin.mjs";
 import { getOpportunityById, renderOpportunityDetail } from "./modules/opportunities.mjs";
 import { renderWhatsApp, renderWhatsAppDrawer } from "./modules/whatsapp.mjs";
-import { createSessionId, fetchV2State, getRuntimeBasePath, sendV2Request } from "./shared-state.mjs";
+import { createSessionId, fetchState, getRuntimeBasePath, sendRequest } from "./shared-state.mjs";
 import { escapeHtml, localizeValue } from "./shared-ui.mjs";
+
+const GOOGLE_TABS = new Set(["inbound", "rank-ops"]);
 
 const state = {
   locale: "en",
-  copy: getV2LocaleConfig("en"),
+  copy: getLocaleConfig("en"),
   screenKey: "home",
   googleTab: "inbound",
   data: null,
@@ -28,15 +30,36 @@ const state = {
 
 let elements = null;
 
-function routeFor(screenKey, locale = state.locale, params = {}) {
-  const base = `${state.basePath}/${locale}`;
+function normalizeGoogleTab(tab) {
+  return GOOGLE_TABS.has(tab) ? tab : "inbound";
+}
+
+function getGoogleTabFromSearch(search = window.location.search) {
+  const params = new URLSearchParams(search);
+  return normalizeGoogleTab(params.get("tab") || "");
+}
+
+function routeForPath(screenKey, { basePath = "", locale = "en", opportunityId = "", googleTab = "" } = {}) {
+  const base = `${basePath}/${locale}`;
   if (screenKey === "home") return `${base}/`;
   if (screenKey === "whatsapp") return `${base}/whatsapp/`;
   if (screenKey === "linkedin") return `${base}/linkedin/`;
-  if (screenKey === "google") return `${base}/google/`;
+  if (screenKey === "google") {
+    const tab = normalizeGoogleTab(googleTab);
+    return `${base}/google/${tab === "rank-ops" ? "?tab=rank-ops" : ""}`;
+  }
   if (screenKey === "handoff") return `${base}/handoff/`;
-  if (screenKey === "opportunity-detail") return `${base}/opportunities/${params.id || getOpportunityIdFromPath()}/`;
+  if (screenKey === "opportunity-detail") return `${base}/opportunities/${opportunityId}/`;
   return `${base}/`;
+}
+
+function routeFor(screenKey, locale = state.locale, params = {}) {
+  return routeForPath(screenKey, {
+    basePath: state.basePath,
+    locale,
+    opportunityId: params.id || getOpportunityIdFromPath(),
+    googleTab: params.tab || "",
+  });
 }
 
 function getOpportunityIdFromPath() {
@@ -49,14 +72,14 @@ function findRecord(entity, id) {
 }
 
 function getDrawerContent(entity, record) {
-  if (!record) return `<div class="v2-empty">${escapeHtml(state.copy.chrome.empty)}</div>`;
+  if (!record) return `<div class="app-empty">${escapeHtml(state.copy.chrome.empty)}</div>`;
   if (entity === "whatsapp_items") return renderWhatsAppDrawer({ state, copy: state.copy }, record);
   if (entity === "linkedin_prospects") return renderLinkedInDrawer({ state, copy: state.copy }, record);
   if (entity === "google_inbound_items" || entity === "google_rank_tasks") {
     return renderGoogleDrawer({ state, copy: state.copy }, entity, record);
   }
   if (entity === "qualified_leads") return renderHandoffDrawer({ state, copy: state.copy }, record);
-  return `<div class="v2-empty">${escapeHtml(state.copy.chrome.empty)}</div>`;
+  return `<div class="app-empty">${escapeHtml(state.copy.chrome.empty)}</div>`;
 }
 
 function renderNav() {
@@ -70,7 +93,7 @@ function renderNav() {
   elements.nav.innerHTML = items
     .map(
       ([screenKey, label]) => `
-        <a class="v2-nav-link ${state.screenKey === screenKey ? "active" : ""}" href="${routeFor(screenKey)}" data-nav="${screenKey}">
+        <a class="app-nav-link ${state.screenKey === screenKey ? "active" : ""}" href="${routeFor(screenKey, state.locale, screenKey === "google" ? { tab: state.googleTab } : {})}" data-nav="${screenKey}">
           <span>${escapeHtml(label)}</span>
         </a>
       `,
@@ -80,7 +103,7 @@ function renderNav() {
 
 function renderNotice() {
   if (!state.notice) return "";
-  return `<div class="v2-notice">${escapeHtml(state.notice)}</div>`;
+  return `<div class="app-notice">${escapeHtml(state.notice)}</div>`;
 }
 
 function renderScreen() {
@@ -132,7 +155,10 @@ function renderChrome() {
   elements.brandMark.textContent = state.copy.meta.brandMark;
   elements.productName.textContent = state.copy.meta.productName;
   elements.productSubtitle.textContent = state.copy.meta.productSubtitle;
-  elements.localeSwitch.href = routeFor(state.screenKey, state.locale === "en" ? "ar" : "en", { id: getOpportunityIdFromPath() });
+  elements.localeSwitch.href = routeFor(state.screenKey, state.locale === "en" ? "ar" : "en", {
+    id: getOpportunityIdFromPath(),
+    tab: state.screenKey === "google" ? state.googleTab : "",
+  });
   elements.localeSwitch.textContent = state.locale === "en" ? "AR" : "EN";
 }
 
@@ -144,7 +170,7 @@ function renderApp() {
 }
 
 async function refreshState(message = "") {
-  const remote = await fetchV2State({ sessionId: state.sessionId });
+  const remote = await fetchState({ sessionId: state.sessionId });
   state.data = remote.payload;
   state.version = remote.version;
   state.notice = message;
@@ -163,6 +189,24 @@ function openDrawer(entity, id) {
 
 function navigate(screenKey, params = {}) {
   window.location.href = routeFor(screenKey, state.locale, params);
+}
+
+function syncGoogleTabFromLocation() {
+  state.googleTab = getGoogleTabFromSearch();
+}
+
+function setGoogleTab(tab, historyMode = "push") {
+  const nextTab = normalizeGoogleTab(tab);
+  const nextUrl = routeFor("google", state.locale, { tab: nextTab });
+  const currentUrl = `${window.location.pathname}${window.location.search}`;
+
+  state.googleTab = nextTab;
+
+  if (currentUrl !== nextUrl) {
+    window.history[historyMode === "replace" ? "replaceState" : "pushState"]({}, "", nextUrl);
+  }
+
+  renderApp();
 }
 
 function formToObject(form) {
@@ -189,7 +233,7 @@ async function handleCreateEntity(form) {
   }
   values.id = values.id || createId(getEntityPrefix(entity));
   const endpoint = `/${entity}`;
-  const next = await sendV2Request(endpoint, {
+  const next = await sendRequest(endpoint, {
     method: "POST",
     body: values,
     sessionId: state.sessionId,
@@ -204,7 +248,7 @@ async function handleCreateEntity(form) {
 async function handleEditRecord(form) {
   const [entity, id] = form.dataset.editRecord.split(":");
   const values = formToObject(form);
-  const next = await sendV2Request(`/${entity}/${id}`, {
+  const next = await sendRequest(`/${entity}/${id}`, {
     method: "PATCH",
     body: values,
     sessionId: state.sessionId,
@@ -219,7 +263,7 @@ async function handleEditRecord(form) {
 async function handleConvertSource(form) {
   const [entity, id] = form.dataset.convertSource.split(":");
   const values = formToObject(form);
-  const next = await sendV2Request("/conversions/qualified-leads", {
+  const next = await sendRequest("/conversions/qualified-leads", {
     method: "POST",
     body: {
       id: createId("ql"),
@@ -241,7 +285,7 @@ async function handleCreateOpportunity(form) {
   const qualifiedLeadId = form.dataset.createOpportunity;
   const values = formToObject(form);
   const opportunityId = createId("opp");
-  const next = await sendV2Request("/opportunities", {
+  const next = await sendRequest("/opportunities", {
     method: "POST",
     body: {
       id: opportunityId,
@@ -259,7 +303,7 @@ async function handleCreateOpportunity(form) {
 async function handleTransition(token) {
   const [entity, id, nextStatus] = token.split(":");
   const statusField = getStatusField(entity);
-  const next = await sendV2Request(`/${entity}/${id}`, {
+  const next = await sendRequest(`/${entity}/${id}`, {
     method: "PATCH",
     body: { [statusField]: nextStatus },
     sessionId: state.sessionId,
@@ -299,8 +343,7 @@ function bindEvents() {
     }
 
     if (target.dataset.setGoogleTab) {
-      state.googleTab = target.dataset.setGoogleTab;
-      renderScreen();
+      setGoogleTab(target.dataset.setGoogleTab);
       return;
     }
 
@@ -330,31 +373,38 @@ function bindEvents() {
 
   elements.drawerBackdrop.addEventListener("click", closeDrawer);
   elements.drawerClose.addEventListener("click", closeDrawer);
+  window.addEventListener("popstate", () => {
+    if (state.screenKey === "google") {
+      syncGoogleTabFromLocation();
+      renderApp();
+    }
+  });
 }
 
-async function bootstrapV2({ locale = "en", screenKey = "home" } = {}) {
+async function bootstrapApp({ locale = "en", screenKey = "home" } = {}) {
   state.basePath = getRuntimeBasePath();
   state.locale = locale;
-  state.copy = getV2LocaleConfig(locale);
+  state.copy = getLocaleConfig(locale);
   state.screenKey = screenKey;
+  state.googleTab = screenKey === "google" ? getGoogleTabFromSearch() : "inbound";
 
   elements = {
-    nav: document.querySelector("#v2-nav"),
-    brandMark: document.querySelector("#v2-brand-mark"),
-    productName: document.querySelector("#v2-product-name"),
-    productSubtitle: document.querySelector("#v2-product-subtitle"),
-    screenTitle: document.querySelector("#v2-screen-title"),
-    localeSwitch: document.querySelector("#v2-locale-switch"),
-    content: document.querySelector("#v2-content"),
-    drawer: document.querySelector("#v2-drawer"),
-    drawerBody: document.querySelector("#v2-drawer-body"),
-    drawerTitle: document.querySelector("#v2-drawer-title"),
-    drawerClose: document.querySelector("#v2-drawer-close"),
-    drawerBackdrop: document.querySelector("#v2-drawer-backdrop"),
+    nav: document.querySelector("#app-nav"),
+    brandMark: document.querySelector("#app-brand-mark"),
+    productName: document.querySelector("#app-product-name"),
+    productSubtitle: document.querySelector("#app-product-subtitle"),
+    screenTitle: document.querySelector("#app-screen-title"),
+    localeSwitch: document.querySelector("#app-locale-switch"),
+    content: document.querySelector("#app-content"),
+    drawer: document.querySelector("#app-drawer"),
+    drawerBody: document.querySelector("#app-drawer-body"),
+    drawerTitle: document.querySelector("#app-drawer-title"),
+    drawerClose: document.querySelector("#app-drawer-close"),
+    drawerBackdrop: document.querySelector("#app-drawer-backdrop"),
   };
 
   bindEvents();
   await refreshState();
 }
 
-export { bootstrapV2 };
+export { bootstrapApp, normalizeGoogleTab, routeForPath };

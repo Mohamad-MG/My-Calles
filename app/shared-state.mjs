@@ -34,7 +34,7 @@ async function readJson(response, fallbackMessage) {
   }
 }
 
-async function fetchV2State({ sessionId }) {
+async function fetchState({ sessionId }) {
   const headers = {
     "X-User": "dashboard-web",
     "X-Session-Id": sessionId,
@@ -75,7 +75,7 @@ async function fetchV2State({ sessionId }) {
   }
 }
 
-async function sendV2Request(path, { method = "GET", body, sessionId, version = 0 } = {}) {
+async function sendRequest(path, { method = "GET", body, sessionId, version = 0 } = {}) {
   if (getRuntimeMode() === "static") {
     throw new Error("This GitHub Pages deployment is read-only. Run the Node server for live state changes.");
   }
@@ -107,9 +107,9 @@ async function sendV2Request(path, { method = "GET", body, sessionId, version = 
 
 export {
   createSessionId,
-  fetchV2State,
+  fetchState,
   getRuntimeBasePath,
   getRuntimeMode,
   getStaticStatePath,
-  sendV2Request,
+  sendRequest,
 };

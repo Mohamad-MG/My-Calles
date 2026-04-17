@@ -7,9 +7,9 @@ import {
   validateOpportunityTransition,
 } from "./opportunity-domain.mjs";
 
-const V2_STORAGE_KEY = "mycalls-ops";
+const APP_STORAGE_KEY = "mycalls-ops";
 
-const V2_ENTITIES = {
+const ENTITY_ALIASES = {
   whatsapp_item: "whatsapp_items",
   whatsapp_items: "whatsapp_items",
   linkedin_prospect: "linkedin_prospects",
@@ -203,16 +203,16 @@ function coerceNumber(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-function resolveV2Collection(entity) {
-  const collection = V2_ENTITIES[entity];
+function resolveCollection(entity) {
+  const collection = ENTITY_ALIASES[entity];
   if (!collection) {
-    throw new Error(`Unknown V2 entity "${entity}".`);
+    throw new Error(`Unknown entity "${entity}".`);
   }
   return collection;
 }
 
 function getDefaultsForCollection(collection) {
-  switch (resolveV2Collection(collection)) {
+  switch (resolveCollection(collection)) {
     case "whatsapp_items":
       return WHATSAPP_DEFAULTS;
     case "linkedin_prospects":
@@ -252,7 +252,7 @@ function normalizeCollectionItems(collection, items = [], actor = "system", time
   }));
 }
 
-function normalizeV2State(candidate, actor = "system", timestamp = nowDate()) {
+function normalizeState(candidate, actor = "system", timestamp = nowDate()) {
   const state = candidate || {};
   const normalized = {
     whatsapp_items: normalizeCollectionItems("whatsapp_items", state.whatsapp_items, actor, timestamp),
@@ -271,18 +271,18 @@ function normalizeV2State(candidate, actor = "system", timestamp = nowDate()) {
 }
 
 function getRequiredErrors(collection, record) {
-  const requiredFields = REQUIRED_FIELDS[resolveV2Collection(collection)] || [];
+  const requiredFields = REQUIRED_FIELDS[resolveCollection(collection)] || [];
   return requiredFields
     .filter((field) => isBlank(record?.[field]))
     .map((field) => `Field "${field}" is required.`);
 }
 
 function getTransitionMap(collection) {
-  return TRANSITION_MAPS[resolveV2Collection(collection)] || null;
+  return TRANSITION_MAPS[resolveCollection(collection)] || null;
 }
 
 function isStatusTransitionAllowed(collection, currentStatus, nextStatus) {
-  const normalizedCollection = resolveV2Collection(collection);
+  const normalizedCollection = resolveCollection(collection);
   if (!nextStatus || currentStatus === nextStatus) {
     return true;
   }
@@ -300,15 +300,15 @@ function isStatusTransitionAllowed(collection, currentStatus, nextStatus) {
 }
 
 function getStatusField(collection) {
-  return resolveV2Collection(collection) === "qualified_leads"
+  return resolveCollection(collection) === "qualified_leads"
     ? "handoff_status"
-    : resolveV2Collection(collection) === "opportunities"
+    : resolveCollection(collection) === "opportunities"
       ? "current_stage"
       : "status";
 }
 
 function validateStatusPatch(collection, beforeRecord, afterRecord) {
-  const normalizedCollection = resolveV2Collection(collection);
+  const normalizedCollection = resolveCollection(collection);
   const statusField = getStatusField(normalizedCollection);
   const currentStatus = beforeRecord?.[statusField];
   const nextStatus = afterRecord?.[statusField];
@@ -330,7 +330,7 @@ function hasDuplicateOpportunity(state, qualifiedLeadId) {
 }
 
 function isQualifiedSourceStatus(collection, status) {
-  const normalizedCollection = resolveV2Collection(collection);
+  const normalizedCollection = resolveCollection(collection);
   if (normalizedCollection === "google_rank_tasks") {
     return status === "Opportunity Found";
   }
@@ -338,14 +338,14 @@ function isQualifiedSourceStatus(collection, status) {
 }
 
 function getSourceRecord(state, entity, id) {
-  const collection = resolveV2Collection(entity);
+  const collection = resolveCollection(entity);
   return (state[collection] || []).find((item) => item.id === id) || null;
 }
 
 function hasActiveQualifiedLead(state, originEntity, originRecordId) {
   return (state.qualified_leads || []).some(
     (lead) =>
-      lead.origin_entity === resolveV2Collection(originEntity) &&
+      lead.origin_entity === resolveCollection(originEntity) &&
       lead.origin_record_id === originRecordId &&
       HANDOFF_ACTIVE_STATUSES.includes(lead.handoff_status) &&
       !lead.converted_opportunity_id,
@@ -396,7 +396,7 @@ function getOpportunityCreateErrorsV2(state, draft) {
 }
 
 function getCreateErrors(collection, state, draft) {
-  const normalizedCollection = resolveV2Collection(collection);
+  const normalizedCollection = resolveCollection(collection);
   if (normalizedCollection === "qualified_leads") {
     return getQualifiedLeadCreateErrors(state, draft);
   }
@@ -416,7 +416,7 @@ function createQualifiedLeadFromSource(sourceRecord, entity, values = {}, actor 
     ...QUALIFIED_LEAD_DEFAULTS,
     id: values.id || createId("ql"),
     origin_channel: sourceRecord.channel,
-    origin_entity: resolveV2Collection(entity),
+    origin_entity: resolveCollection(entity),
     origin_record_id: sourceRecord.id,
     pain_summary:
       values.pain_summary ||
@@ -465,9 +465,9 @@ function createOpportunityFromQualifiedLead(qualifiedLead, values = {}, actor = 
   };
 }
 
-function createV2SeedData() {
+function createSeedData() {
   const today = nowDate();
-  return normalizeV2State({
+  return normalizeState({
     whatsapp_items: [
       {
         id: "wa-1",
@@ -654,7 +654,7 @@ function getChannelPriority(record, collection, today = nowDate()) {
     },
   };
 
-  return (maps[resolveV2Collection(collection)]?.[record.status] || 0) + dateWeight;
+  return (maps[resolveCollection(collection)]?.[record.status] || 0) + dateWeight;
 }
 
 function getSortedResumeItems(records, collection, today = nowDate()) {
@@ -712,7 +712,7 @@ function getAllHomeSummaries(state, today = nowDate()) {
 }
 
 function getDisplayStatus(record, collection, today = nowDate()) {
-  if (resolveV2Collection(collection) !== "opportunities") {
+  if (resolveCollection(collection) !== "opportunities") {
     return record.status || record.handoff_status || "—";
   }
   return getComputedOpportunityStage(record, today);
@@ -729,12 +729,12 @@ export {
   SERVICE_CONFIDENCE_OPTIONS,
   SERVICE_OPTIONS,
   TRANSITION_MAPS,
-  V2_STORAGE_KEY,
+  APP_STORAGE_KEY,
   WHATSAPP_DEFAULTS,
   createId,
   createOpportunityFromQualifiedLead,
   createQualifiedLeadFromSource,
-  createV2SeedData,
+  createSeedData,
   deepClone,
   getAllHomeSummaries,
   getCreateErrors,
@@ -750,8 +750,8 @@ export {
   isBlank,
   isQualifiedSourceStatus,
   isStatusTransitionAllowed,
-  normalizeV2State,
+  normalizeState,
   nowDate,
-  resolveV2Collection,
+  resolveCollection,
   validateStatusPatch,
 };

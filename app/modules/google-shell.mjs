@@ -9,16 +9,16 @@ function renderGoogleShell(app) {
   const rankOps = selectGoogleRankTasks(state);
 
   return `
-    <section class="v2-screen workspace-screen">
-      <header class="v2-hero compact">
+    <section class="app-screen workspace-screen">
+      <header class="app-hero compact">
         <div>
-          <p class="v2-kicker">Google</p>
+          <p class="app-kicker">${escapeHtml(copy.nav.google)}</p>
           <h1>${escapeHtml(copy.modules.google.title)}</h1>
-          <p class="v2-hero-copy">${escapeHtml(copy.modules.google.subtitle)}</p>
+          <p class="app-hero-copy">${escapeHtml(copy.modules.google.subtitle)}</p>
         </div>
-        <div class="v2-tab-row">
-          <button class="v2-tab ${activeTab === "inbound" ? "active" : ""}" type="button" data-set-google-tab="inbound">${escapeHtml(copy.modules.google.inbound)} ${renderBadge(String(inbound.length), "muted")}</button>
-          <button class="v2-tab ${activeTab === "rank-ops" ? "active" : ""}" type="button" data-set-google-tab="rank-ops">${escapeHtml(copy.modules.google.rankOps)} ${renderBadge(String(rankOps.length), "muted")}</button>
+        <div class="app-tab-row">
+          <button class="app-tab ${activeTab === "inbound" ? "active" : ""}" type="button" data-set-google-tab="inbound">${escapeHtml(copy.modules.google.inbound)} ${renderBadge(String(inbound.length), "muted")}</button>
+          <button class="app-tab ${activeTab === "rank-ops" ? "active" : ""}" type="button" data-set-google-tab="rank-ops">${escapeHtml(copy.modules.google.rankOps)} ${renderBadge(String(rankOps.length), "muted")}</button>
         </div>
       </header>
       ${activeTab === "inbound" ? renderGoogleInbound(copy, inbound) : renderGoogleRankOps(copy, rankOps)}

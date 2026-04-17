@@ -61,7 +61,7 @@ State is stored under `data/` and is shared across sessions.
 - Qualified conversion creates a new `qualified_lead` while preserving source history
 - Opportunities can only be created from handoff-ready qualified leads
 - Duplicate opportunity creation is blocked
-- V1 APIs and V1 frontend are removed
+- legacy compatibility routes remain silent-only, while canonical routes stay unversioned
 
 ## Why `file://` Is Unsupported
 
