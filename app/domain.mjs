@@ -20,8 +20,10 @@ const V2_ENTITIES = {
   google_maps_missions: "google_maps_missions",
   google_inbound_item: "google_inbound_items",
   google_inbound_items: "google_inbound_items",
-  google_rank_task: "google_rank_tasks",
-  google_rank_tasks: "google_rank_tasks",
+  google_rank_task: "google_search_workspaces",
+  google_rank_tasks: "google_search_workspaces",
+  google_search_workspace: "google_search_workspaces",
+  google_search_workspaces: "google_search_workspaces",
   qualified_lead: "qualified_leads",
   qualified_leads: "qualified_leads",
   opportunity: "opportunities",
@@ -41,7 +43,8 @@ const TEMPLATE_WORKFLOWS = [
 ];
 const MAPS_MISSION_STATUSES = ["Draft", "Searching", "Shortlist Pending", "Ready for Review", "Complete", "Archived"];
 const MAPS_LEAD_STATUSES = ["Discovered", "Scored", "Shortlisted", "Qualified", "Disqualified"];
-const SEARCH_CAMPAIGN_STATUSES = ["Brief", "Research Ready", "Cluster Ready", "Writing", "Published", "Refresh"];
+const SEARCH_WORKSPACE_STATUSES = ["Brief", "Research Ready", "Cluster Ready", "Writing", "Published", "Refresh"];
+const SEARCH_CAMPAIGN_STATUSES = SEARCH_WORKSPACE_STATUSES;
 const ARTICLE_STATUSES = ["Idea", "Brief Ready", "Drafted", "Published"];
 const MAPS_SCORE_MODEL = {
   call_dependency: 30,
@@ -171,6 +174,11 @@ function makeGoogleMapsMissionDefaults() {
     summary: "",
     next_step: "",
     next_step_date: "",
+    search_agents: [],
+    analysis_agents: [],
+    results_input_raw_json: "",
+    ranked_results_raw_json: "",
+    workflow_summary: "",
     research_primary_template_id: "",
     research_primary_override: "",
     research_primary_result_json: "",
@@ -195,6 +203,123 @@ function createBlankScoreBreakdown() {
     demand_volume: 0,
     contactability: 0,
   };
+}
+
+function normalizeAgentTriplet(value, fallback = []) {
+  let source = value;
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return fallback.slice(0, 3);
+    if (text.startsWith("[")) {
+      try {
+        source = JSON.parse(text);
+      } catch {
+        source = text.split(/\r?\n\r?\n/);
+      }
+    } else {
+      source = text.split(/\r?\n\r?\n/);
+    }
+  }
+  if (!Array.isArray(source)) return fallback.slice(0, 3);
+  const normalized = source.map((item) => String(item || "").trim());
+  const result = [];
+  for (let index = 0; index < 3; index += 1) {
+    result.push(normalized[index] || fallback[index] || "");
+  }
+  return result;
+}
+
+function createPlanningRow(index = 0, values = {}) {
+  return {
+    id: values.id || `row-${index + 1}`,
+    subkeyword: String(values.subkeyword || "").trim(),
+    title_model_one: String(values.title_model_one || values.primary_title || values.primaryTitle || "").trim(),
+    title_model_two: String(values.title_model_two || values.secondary_title || values.secondaryTitle || "").trim(),
+  };
+}
+
+function createKeywordTab(index = 0, values = {}) {
+  const requestedLanguage = String(values.language || "").trim().toLowerCase();
+  const language = requestedLanguage === "en" || requestedLanguage === "english" ? "en" : "ar";
+  const planningRowsSource = Array.isArray(values.planning_rows)
+    ? values.planning_rows
+    : Array.isArray(values.rows)
+      ? values.rows
+      : [];
+
+  return {
+    id: values.id || `kwtab-${index + 1}`,
+    label: String(values.label || values.primary_keyword || values.primaryKeyword || (language === "ar" ? `Arabic keyword ${index + 1}` : `English keyword ${index + 1}`)).trim(),
+    language,
+    primary_keyword: String(values.primary_keyword || values.primaryKeyword || values.label || "").trim(),
+    notes: String(values.notes || "").trim(),
+    status: String(values.status || "Draft").trim() || "Draft",
+    planning_rows: Array.from({ length: 10 }, (_, rowIndex) => createPlanningRow(rowIndex, planningRowsSource[rowIndex] || {})),
+  };
+}
+
+function createDefaultKeywordTabs() {
+  return [
+    ...Array.from({ length: 5 }, (_, index) => createKeywordTab(index, {
+      id: `kwtab-ar-${index + 1}`,
+      language: "ar",
+      label: `Arabic keyword ${index + 1}`,
+      primary_keyword: "",
+    })),
+    ...Array.from({ length: 3 }, (_, index) => createKeywordTab(index + 5, {
+      id: `kwtab-en-${index + 1}`,
+      language: "en",
+      label: `English keyword ${index + 1}`,
+      primary_keyword: "",
+    })),
+  ];
+}
+
+function normalizeKeywordTabs(value) {
+  let source = value;
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return createDefaultKeywordTabs();
+    try {
+      source = JSON.parse(text);
+    } catch {
+      return createDefaultKeywordTabs();
+    }
+  }
+  if (!Array.isArray(source) || !source.length) return createDefaultKeywordTabs();
+
+  const limited = source.slice(0, 8).map((tab, index) => createKeywordTab(index, tab));
+  const arabicCount = limited.filter((tab) => tab.language === "ar").length;
+  const englishCount = limited.filter((tab) => tab.language === "en").length;
+
+  while (limited.length < 8) {
+    const isArabic = arabicCount + limited.filter((tab) => tab.language === "ar").length < 5;
+    limited.push(createKeywordTab(limited.length, {
+      language: isArabic ? "ar" : "en",
+      label: isArabic ? `Arabic keyword ${limited.length + 1}` : `English keyword ${limited.length - 4}`,
+    }));
+  }
+
+  return limited.slice(0, 8);
+}
+
+function buildContentPlanExportText(keywordTabs = []) {
+  const blocks = keywordTabs
+    .map((tab) => {
+      const heading = String(tab.primary_keyword || tab.label || "").trim();
+      const rows = Array.isArray(tab.planning_rows) ? tab.planning_rows : [];
+      const filledRows = rows.filter((row) => row.subkeyword || row.title_model_one || row.title_model_two);
+      if (!heading && !filledRows.length) return "";
+      const rowLines = filledRows.map((row, index) => [
+        `${index + 1}. ${row.subkeyword || "Sub-keyword"}`,
+        `Title 1: ${row.title_model_one || ""}`,
+        `Title 2: ${row.title_model_two || ""}`,
+      ].join("\n")).join("\n\n");
+      return [heading, rowLines].filter(Boolean).join("\n");
+    })
+    .filter(Boolean);
+
+  return blocks.join("\n\n---\n\n");
 }
 
 function makeGoogleInboundDefaults() {
@@ -222,27 +347,17 @@ function makeGoogleInboundDefaults() {
   };
 }
 
-function makeGoogleRankTaskDefaults() {
+function makeGoogleSearchWorkspaceDefaults() {
   return {
     ...COMMON_RECORD_FIELDS,
     channel: "Google",
-    status: "",
-    primary_keyword: "",
-    country: "Saudi Arabia",
-    target_intent: "",
-    target_page: "",
-    campaign_status: "Brief",
-    subkeywords: [],
-    article_ideas: [],
-    keyword_strategy_template_id: "",
-    keyword_strategy_override: "",
-    keyword_strategy_result_json: "",
-    subkeyword_cluster_template_id: "",
-    subkeyword_cluster_override: "",
-    subkeyword_cluster_result_json: "",
-    article_planner_template_id: "",
-    article_planner_override: "",
-    article_planner_result_json: "",
+    workspace_name: "Google Search Workspace",
+    status: "Brief",
+    main_agent_prompt: "",
+    agent_result_raw_json: "",
+    keyword_tabs: [],
+    content_plan_export_text: "",
+    notes: "",
   };
 }
 
@@ -299,7 +414,7 @@ const REQUIRED_FIELDS = {
   google_prompt_templates: ["workflow", "name", "base_prompt", "output_contract_json"],
   google_maps_missions: ["title", "country", "city_scope", "icp_focus", "search_goal", "status", "next_step", "next_step_date"],
   google_inbound_items: ["mission_id", "company_name", "maps_url", "city", "category", "status", "next_step", "next_step_date"],
-  google_rank_tasks: ["primary_keyword", "country", "target_intent", "target_page", "campaign_status", "next_step", "next_step_date"],
+  google_search_workspaces: ["workspace_name", "status", "next_step", "next_step_date"],
   qualified_leads: ["origin_channel", "origin_entity", "origin_record_id", "pain_summary", "qualification_note", "recommended_service", "recommended_service_confidence", "handoff_status", "owner"],
   opportunities: ["qualified_lead_id", "company_name", "owner", "current_stage", "buyer_readiness", "pain_summary", "use_case", "stakeholder_status", "next_step", "next_step_date"],
 };
@@ -328,7 +443,7 @@ const TRANSITION_MAPS = {
     Qualified: ["Disqualified"],
     Disqualified: [],
   },
-  google_rank_tasks: {
+  google_search_workspaces: {
     Brief: ["Research Ready", "Refresh"],
     "Research Ready": ["Cluster Ready", "Refresh"],
     "Cluster Ready": ["Writing", "Refresh"],
@@ -508,8 +623,8 @@ function getDefaultsForCollection(collection) {
       return makeGoogleMapsMissionDefaults();
     case "google_inbound_items":
       return makeGoogleInboundDefaults();
-    case "google_rank_tasks":
-      return makeGoogleRankTaskDefaults();
+    case "google_search_workspaces":
+      return makeGoogleSearchWorkspaceDefaults();
     case "qualified_leads":
       return makeQualifiedLeadDefaults();
     case "opportunities":
@@ -551,7 +666,20 @@ function normalizeMapsMissionRecord(item, actor, timestamp) {
     must_have_signals: normalizeStringList(item.must_have_signals),
     exclude_signals: normalizeStringList(item.exclude_signals),
     status: MAPS_MISSION_STATUSES.includes(item.status) ? item.status : "Draft",
-    summary: item.summary || item.search_goal || "",
+    summary: item.summary || item.workflow_summary || item.search_goal || "",
+    search_agents: normalizeAgentTriplet(item.search_agents, [
+      item.maps_agent_one_box_one || item.research_primary_override || "",
+      item.maps_agent_one_box_two || item.research_secondary_override || "",
+      item.maps_agent_one_box_three || item.search_goal || "",
+    ]),
+    analysis_agents: normalizeAgentTriplet(item.analysis_agents, [
+      item.maps_agent_two_box_one || item.shortlist_override || "",
+      item.maps_agent_two_box_two || "",
+      item.maps_agent_two_box_three || "",
+    ]),
+    results_input_raw_json: normalizeJsonText(item.results_input_raw_json || item.research_primary_result_json || item.research_secondary_result_json, ""),
+    ranked_results_raw_json: normalizeJsonText(item.ranked_results_raw_json || item.shortlist_result_json, ""),
+    workflow_summary: String(item.workflow_summary || item.summary || item.search_goal || "").trim(),
     created_at: item.created_at || timestamp,
     updated_at: item.updated_at || timestamp,
     updated_by: item.updated_by || actor,
@@ -596,27 +724,23 @@ function normalizeMapsLeadRecord(item, actor, timestamp) {
   return normalized;
 }
 
-function normalizeSearchCampaignRecord(item, actor, timestamp) {
+function normalizeSearchWorkspaceRecord(item, actor, timestamp) {
+  const keywordTabs = normalizeKeywordTabs(item.keyword_tabs);
   const normalized = {
-    ...makeGoogleRankTaskDefaults(),
+    ...makeGoogleSearchWorkspaceDefaults(),
     ...item,
-    campaign_status: SEARCH_CAMPAIGN_STATUSES.includes(item.campaign_status) ? item.campaign_status : "Brief",
-    primary_keyword: String(item.primary_keyword || "").trim(),
-    country: String(item.country || "Saudi Arabia").trim(),
-    target_intent: String(item.target_intent || "").trim(),
-    target_page: String(item.target_page || "").trim(),
-    subkeywords: normalizeStringList(item.subkeywords),
-    article_ideas: normalizeArticleIdeas(item.article_ideas),
+    workspace_name: String(item.workspace_name || item.name || "Google Search Workspace").trim() || "Google Search Workspace",
+    status: SEARCH_WORKSPACE_STATUSES.includes(item.status) ? item.status : SEARCH_WORKSPACE_STATUSES.includes(item.campaign_status) ? item.campaign_status : "Brief",
+    main_agent_prompt: String(item.main_agent_prompt || item.search_agent_role || item.keyword_strategy_override || "").trim(),
+    agent_result_raw_json: normalizeJsonText(item.agent_result_raw_json || item.keyword_strategy_result_json || item.subkeyword_cluster_result_json || item.article_planner_result_json, ""),
+    keyword_tabs: keywordTabs,
+    content_plan_export_text: String(item.content_plan_export_text || buildContentPlanExportText(keywordTabs)).trim(),
     summary: String(item.summary || "").trim(),
+    notes: String(item.notes || "").trim(),
     created_at: item.created_at || timestamp,
     updated_at: item.updated_at || timestamp,
     updated_by: item.updated_by || actor,
   };
-
-  for (const slot of SEARCH_AGENT_SLOTS) {
-    normalized[slot.overrideField] = String(item[slot.overrideField] || "").trim();
-    normalized[slot.resultField] = normalizeJsonText(item[slot.resultField], "");
-  }
 
   return normalized;
 }
@@ -656,8 +780,8 @@ function normalizeCollectionItems(collection, items = [], actor = "system", time
       return safeItems.map((item) => normalizeMapsMissionRecord(item, actor, timestamp));
     case "google_inbound_items":
       return safeItems.map((item) => normalizeMapsLeadRecord(item, actor, timestamp));
-    case "google_rank_tasks":
-      return safeItems.map((item) => normalizeSearchCampaignRecord(item, actor, timestamp));
+    case "google_search_workspaces":
+      return safeItems.map((item) => normalizeSearchWorkspaceRecord(item, actor, timestamp));
     case "qualified_leads":
       return safeItems.map((item) => normalizeQualifiedLeadRecord(item, actor, timestamp));
     case "opportunities":
@@ -1204,15 +1328,79 @@ function migrateLegacyGoogleRankTasks(items = [], timestamp = nowDate()) {
   });
 }
 
+function createSearchWorkspaceFromLegacyTasks(items = [], timestamp = nowDate()) {
+  const tasks = migrateLegacyGoogleRankTasks(items, timestamp);
+  if (!tasks.length) {
+    return [{
+      id: "gsearch-workspace",
+      workspace_name: "Google Search Workspace",
+      status: "Brief",
+      main_agent_prompt: "",
+      agent_result_raw_json: "",
+      keyword_tabs: createDefaultKeywordTabs(),
+      content_plan_export_text: "",
+      summary: "",
+      next_step: "Build the keyword tabs and article planning rows.",
+      next_step_date: timestamp,
+    }];
+  }
+
+  const tabs = tasks.slice(0, 8).map((task, index) => createKeywordTab(index, {
+    id: task.id || `kwtab-${index + 1}`,
+    language: /[\u0600-\u06FF]/.test(String(task.primary_keyword || "")) ? "ar" : "en",
+    label: task.primary_keyword || `Keyword ${index + 1}`,
+    primary_keyword: task.primary_keyword || "",
+    notes: task.summary || "",
+    status: task.status || task.campaign_status || "Draft",
+    planning_rows: Array.from({ length: 10 }, (_, rowIndex) => ({
+      id: `row-${rowIndex + 1}`,
+      subkeyword: task.subkeywords?.[rowIndex] || "",
+      title_model_one: task.article_ideas?.[rowIndex]?.title || "",
+      title_model_two: "",
+    })),
+  }));
+
+  const status = tasks.reduce((current, task) => {
+    const candidate = task.campaign_status || "Brief";
+    return SEARCH_WORKSPACE_STATUSES.indexOf(candidate) > SEARCH_WORKSPACE_STATUSES.indexOf(current) ? candidate : current;
+  }, "Brief");
+
+  const workspace = {
+    id: "gsearch-workspace",
+    workspace_name: "Google Search Workspace",
+    status,
+    main_agent_prompt: tasks[0]?.keyword_strategy_override || tasks[0]?.summary || "",
+    agent_result_raw_json: tasks.map((task) => ({
+      id: task.id,
+      primary_keyword: task.primary_keyword,
+      subkeywords: task.subkeywords,
+      article_ideas: task.article_ideas,
+    })),
+    keyword_tabs: normalizeKeywordTabs(tabs),
+    summary: tasks[0]?.summary || "",
+    next_step: tasks[0]?.next_step || "Build the keyword tabs and article planning rows.",
+    next_step_date: tasks[0]?.next_step_date || timestamp,
+    notes: tasks.map((task) => task.notes).filter(Boolean).join("\n\n"),
+    created_at: tasks[0]?.created_at || timestamp,
+    updated_at: tasks[0]?.updated_at || timestamp,
+    updated_by: tasks[0]?.updated_by || "system",
+  };
+  workspace.content_plan_export_text = buildContentPlanExportText(workspace.keyword_tabs);
+  workspace.agent_result_raw_json = normalizeJsonText(workspace.agent_result_raw_json, "");
+  return [workspace];
+}
+
 function prepareGoogleCollections(state = {}, timestamp = nowDate()) {
   const promptTemplates = Array.isArray(state.google_prompt_templates)
     ? state.google_prompt_templates
     : createPromptTemplateSeeds();
 
   const inboundItems = migrateLegacyGoogleInboundItems(state.google_inbound_items || [], timestamp);
-  const rankTasks = migrateLegacyGoogleRankTasks(state.google_rank_tasks || [], timestamp);
   const missions = Array.isArray(state.google_maps_missions) ? [...state.google_maps_missions] : [];
   const needsLegacyMission = inboundItems.some((item) => item.mission_id === "legacy-import");
+  const workspaces = Array.isArray(state.google_search_workspaces) && state.google_search_workspaces.length
+    ? state.google_search_workspaces
+    : createSearchWorkspaceFromLegacyTasks(state.google_rank_tasks || [], timestamp);
 
   if (needsLegacyMission && !missions.some((mission) => mission.id === "legacy-import")) {
     missions.unshift(createLegacyMapsMissionSeed(timestamp));
@@ -1222,7 +1410,7 @@ function prepareGoogleCollections(state = {}, timestamp = nowDate()) {
     google_prompt_templates: promptTemplates,
     google_maps_missions: missions,
     google_inbound_items: inboundItems,
-    google_rank_tasks: rankTasks,
+    google_search_workspaces: workspaces,
   };
 }
 
@@ -1236,7 +1424,7 @@ function normalizeState(candidate, actor = "system", timestamp = nowDate()) {
     google_prompt_templates: normalizeCollectionItems("google_prompt_templates", googleCollections.google_prompt_templates, actor, timestamp),
     google_maps_missions: normalizeCollectionItems("google_maps_missions", googleCollections.google_maps_missions, actor, timestamp),
     google_inbound_items: normalizeCollectionItems("google_inbound_items", googleCollections.google_inbound_items, actor, timestamp),
-    google_rank_tasks: normalizeCollectionItems("google_rank_tasks", googleCollections.google_rank_tasks, actor, timestamp),
+    google_search_workspaces: normalizeCollectionItems("google_search_workspaces", googleCollections.google_search_workspaces, actor, timestamp),
     qualified_leads: normalizeCollectionItems("qualified_leads", state.qualified_leads, actor, timestamp),
     opportunities: normalizeCollectionItems("opportunities", state.opportunities, actor, timestamp),
   };
@@ -1267,7 +1455,7 @@ function getStatusField(collection) {
   const normalizedCollection = resolveCollection(collection);
   if (normalizedCollection === "qualified_leads") return "handoff_status";
   if (normalizedCollection === "opportunities") return "current_stage";
-  if (normalizedCollection === "google_rank_tasks") return "campaign_status";
+  if (normalizedCollection === "google_search_workspaces") return "status";
   return "status";
 }
 
@@ -1410,16 +1598,20 @@ function validateMapsLeadRecord(state, draft) {
   return errors;
 }
 
-function validateSearchCampaignRecord(state, draft) {
+function validateSearchWorkspaceRecord(state, draft) {
   const errors = [];
-  if (!SEARCH_CAMPAIGN_STATUSES.includes(draft.campaign_status)) {
-    errors.push('Field "campaign_status" is invalid for google_rank_tasks.');
+  if (!SEARCH_WORKSPACE_STATUSES.includes(draft.status)) {
+    errors.push('Field "status" is invalid for google_search_workspaces.');
   }
-  if (Array.isArray(draft.article_ideas) && draft.article_ideas.length && draft.article_ideas.length !== 10) {
-    errors.push('Field "article_ideas" must contain exactly 10 items when present.');
+  const tabs = normalizeKeywordTabs(draft.keyword_tabs);
+  if (tabs.length !== 8) {
+    errors.push('Field "keyword_tabs" must contain exactly 8 keyword tabs.');
   }
-  if ((state.google_rank_tasks || []).length >= 10 && !(state.google_rank_tasks || []).some((item) => item.id === draft.id)) {
-    errors.push("Google Search supports a maximum of 10 active campaigns.");
+  if (tabs.some((tab) => !Array.isArray(tab.planning_rows) || tab.planning_rows.length !== 10)) {
+    errors.push('Each keyword tab must contain exactly 10 planning rows.');
+  }
+  if ((state.google_search_workspaces || []).length >= 1 && !(state.google_search_workspaces || []).some((item) => item.id === draft.id)) {
+    errors.push("Google Search supports a single operational workspace.");
   }
   return errors;
 }
@@ -1465,8 +1657,8 @@ function getCreateErrors(collection, state, draft) {
   if (normalizedCollection === "google_inbound_items") {
     return [...errors, ...validateMapsLeadRecord(state, draft)];
   }
-  if (normalizedCollection === "google_rank_tasks") {
-    return [...errors, ...validateSearchCampaignRecord(state, draft)];
+  if (normalizedCollection === "google_search_workspaces") {
+    return [...errors, ...validateSearchWorkspaceRecord(state, draft)];
   }
 
   const transitionMap = getTransitionMap(normalizedCollection);
@@ -1554,7 +1746,7 @@ function getGoogleLeadPriority(record, today = nowDate()) {
   return (map[record.status] || 0) + dateWeight;
 }
 
-function getGoogleCampaignPriority(record, today = nowDate()) {
+function getGoogleSearchWorkspacePriority(record, today = nowDate()) {
   const dateWeight = record.next_step_date && record.next_step_date <= today ? 5 : 0;
   const map = {
     Refresh: 95,
@@ -1564,7 +1756,7 @@ function getGoogleCampaignPriority(record, today = nowDate()) {
     Brief: 56,
     Published: 32,
   };
-  return (map[record.campaign_status] || 0) + dateWeight;
+  return (map[record.status] || 0) + dateWeight;
 }
 
 function getChannelPriority(record, collection, today = nowDate()) {
@@ -1591,8 +1783,8 @@ function getChannelPriority(record, collection, today = nowDate()) {
   if (resolveCollection(collection) === "google_inbound_items") {
     return getGoogleLeadPriority(record, today);
   }
-  if (resolveCollection(collection) === "google_rank_tasks") {
-    return getGoogleCampaignPriority(record, today);
+  if (resolveCollection(collection) === "google_search_workspaces") {
+    return getGoogleSearchWorkspacePriority(record, today);
   }
 
   return (maps[resolveCollection(collection)]?.[record.status] || 0) + dateWeight;
@@ -1634,22 +1826,22 @@ function getHomeChannelSummary(state, channel, today = nowDate()) {
   }
 
   const mapsLeads = state.google_inbound_items || [];
-  const campaigns = state.google_rank_tasks || [];
+  const workspaces = state.google_search_workspaces || [];
   const ranked = [
     ...mapsLeads
       .filter((item) => item.status !== "Disqualified")
       .map((item) => ({ item, score: getGoogleLeadPriority(item, today) })),
-    ...campaigns.map((item) => ({ item, score: getGoogleCampaignPriority(item, today) })),
+    ...workspaces.map((item) => ({ item, score: getGoogleSearchWorkspacePriority(item, today) })),
   ].sort((left, right) => right.score - left.score);
 
   return {
     channel: "Google",
     today_captured:
       mapsLeads.filter((item) => item.created_at === today).length +
-      campaigns.filter((item) => item.created_at === today).length,
+      workspaces.filter((item) => item.created_at === today).length,
     needs_action:
       mapsLeads.filter((item) => ["Discovered", "Scored", "Shortlisted"].includes(item.status)).length +
-      campaigns.filter((item) => ["Brief", "Research Ready", "Cluster Ready", "Writing", "Refresh"].includes(item.campaign_status)).length,
+      workspaces.filter((item) => ["Brief", "Research Ready", "Cluster Ready", "Writing", "Refresh"].includes(item.status)).length,
     qualified_ready: mapsLeads.filter((item) => item.status === "Qualified" && !item.converted_qualified_lead_id).length,
     resume_item: ranked[0]?.item || null,
   };
@@ -1667,8 +1859,8 @@ function getDisplayStatus(record, collection, today = nowDate()) {
   if (normalizedCollection === "qualified_leads") {
     return record.handoff_status || "—";
   }
-  if (normalizedCollection === "google_rank_tasks") {
-    return record.campaign_status || "—";
+  if (normalizedCollection === "google_search_workspaces") {
+    return record.status || "—";
   }
   return record.status || "—";
 }
@@ -1686,6 +1878,7 @@ export {
   OPPORTUNITY_ACTIVE_STAGES,
   SEARCH_AGENT_SLOTS,
   SEARCH_CAMPAIGN_STATUSES,
+  SEARCH_WORKSPACE_STATUSES,
   SERVICE_CONFIDENCE_OPTIONS,
   SERVICE_OPTIONS,
   TEMPLATE_WORKFLOWS,
@@ -1717,6 +1910,8 @@ export {
   isStatusTransitionAllowed,
   normalizeArticleIdeas,
   normalizeJsonText,
+  normalizeKeywordTabs,
+  buildContentPlanExportText,
   normalizeScoreBreakdown,
   normalizeState,
   normalizeStringList,
